@@ -50,7 +50,6 @@ export default function Seasonal() {
   const borderColor = getBorderColor(theme.background)
   const contrastOnPrimary = getContrastColor(theme.primary)
 
-  const isLightSide = textColor === '#000000'
 
   const [year, setYear] = useState<number>(currentYear)
   const [season, setSeason] = useState<Season>(() => {
@@ -143,7 +142,7 @@ export default function Seasonal() {
   }
 
   return (
-    <Layout>
+    <div>
       {/* HERO COM BANNER (IDÊNTICO AO SEARCH.TSX) */}
       <div className="relative h-[380px] -mt-16 overflow-hidden flex items-center justify-center">
         {profile.banner ? (
@@ -329,6 +328,6 @@ export default function Seasonal() {
           </div>
         </div>
       </div>
-    </Layout>
+    </div>
   )
 }

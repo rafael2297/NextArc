@@ -11,7 +11,6 @@ import {
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 
-import Layout from '../components/layout/Layout'
 import { useAppStore } from '../store/useAppStore'
 import { useProfileStore } from '../store/useProfileStore'
 import HomeActivityCard from '../components/cards/HomeActivityCard'
@@ -24,11 +23,9 @@ export default function Home() {
   const profile = useProfileStore((state) => state.profile)
   const theme = profile.theme
 
-  // Cores dinâmicas de contraste
   const textColor = getContrastColor(theme.background)
   const subTextColor = hexToRgba(textColor, 0.6)
 
-  // Cálculos de progresso
   const watchingCount = animeList.filter((a) => a.status === 'watching').length
   const readingCount = mangaList.filter((m) => m.status === 'reading').length
   const completedCount =
@@ -41,12 +38,14 @@ export default function Home() {
     .slice(0, 4)
 
   return (
-    <Layout>
+    // Removido o <Layout> daqui (ele já está no App.tsx ou Routes)
+    <div className="flex-1">
       {/* SEÇÃO HERO COM BANNER DINÂMICO */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="relative h-[450px] -mt-16 overflow-hidden flex items-end pb-20 px-6"
+
+        className="relative h-[400px] md:h-[450px]  overflow-hidden flex items-end pb-16 px-6"
       >
         {/* Imagem de Fundo (Banner) */}
         {profile.banner ? (
@@ -59,18 +58,12 @@ export default function Home() {
           <div className="absolute inset-0" style={{ backgroundColor: theme.navbar }} />
         )}
 
-        {/* Gradiente para mesclar a imagem com o fundo da página e garantir contraste */}
+        {/* Gradiente de Fusão */}
         <div
           className="absolute inset-0 bg-gradient-to-t transition-colors duration-700"
           style={{
-            backgroundImage: `linear-gradient(to top, ${theme.background} 5%, ${hexToRgba(theme.background, 0.4)} 50%, transparent 100%)`
+            backgroundImage: `linear-gradient(to top, ${theme.background} 5%, ${hexToRgba(theme.background, 0.2)} 60%, transparent 100%)`
           }}
-        />
-
-        {/* Luzes de Fundo Estilizadas */}
-        <div
-          className="absolute top-0 right-0 w-[400px] h-[400px] blur-[120px] rounded-full -mr-32 -mt-32 opacity-30"
-          style={{ backgroundColor: theme.primary }}
         />
 
         <div className="relative z-10 max-w-6xl mx-auto w-full flex flex-col md:flex-row md:items-end justify-between gap-8">
@@ -107,18 +100,18 @@ export default function Home() {
             </div>
           </div>
 
-          {/* CARD DE AVATAR RÁPIDO */}
+          {/* AVATAR RÁPIDO */}
           <motion.div
             whileHover={{ scale: 1.05, rotate: 0 }}
             onClick={() => navigate(ROUTES.PROFILE)}
-            className="relative cursor-pointer group shrink-0"
+            className="relative cursor-pointer group shrink-0 hidden md:block"
           >
             <div
               className="absolute -inset-1 rounded-[2.8rem] blur opacity-25 group-hover:opacity-60 transition duration-700"
               style={{ backgroundColor: theme.primary }}
             />
             <div
-              className="relative h-28 w-28 md:h-32 md:w-32 rounded-[2.5rem] border-2 border-white/10 p-1.5 rotate-3 group-hover:rotate-0 transition-transform duration-500 shadow-2xl"
+              className="relative h-32 w-32 rounded-[2.5rem] border-2 border-white/10 p-1.5 rotate-3 group-hover:rotate-0 transition-transform duration-500 shadow-2xl"
               style={{ backgroundColor: theme.navbar }}
             >
               {profile.avatar ? (
@@ -144,14 +137,13 @@ export default function Home() {
             <StatCard icon={<Star size={22} className="text-pink-500" />} label="Completos" value={completedCount} accentColor="#ec4899" />
           </div>
 
-          {/* BOTÃO DO INVENTÁRIO TCG */}
           <motion.button
             whileHover={{ y: -5 }}
             onClick={() => navigate(ROUTES.INVENTORY)}
             className="relative overflow-hidden border p-5 rounded-[2.5rem] flex flex-col justify-between group h-full backdrop-blur-xl transition-colors"
             style={{
               backgroundColor: hexToRgba(theme.navbar, 0.5),
-              borderColor: hexToRgba(textColor, 0.1), // Adicionada borda dinâmica baseada no contraste
+              borderColor: hexToRgba(textColor, 0.1),
               color: textColor
             }}
           >
@@ -181,7 +173,7 @@ export default function Home() {
           </motion.button>
         </div>
 
-        {/* ÚLTIMAS ATIVIDADES */}
+        {/* ATIVIDADE RECENTE */}
         <section className="space-y-6">
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-3">
@@ -200,13 +192,12 @@ export default function Home() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
               {recentActivity.map((item) => (
                 <HomeActivityCard
-                  key={`${item.type}-${item.id}`} // Chave mais segura
+                  key={`${item.type}-${item.id}`}
                   id={item.id}
                   title={item.title}
                   image={item.cover}
-
                   type={item.type}
-                  format={item.format} 
+                  format={item.format}
                   addedAt={item.updatedAt ?? item.addedAt}
                 />
               ))}
@@ -230,7 +221,7 @@ export default function Home() {
           )}
         </section>
       </div>
-    </Layout>
+    </div>
   )
 }
 

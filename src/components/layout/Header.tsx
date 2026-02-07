@@ -1,35 +1,52 @@
 import { useLocation, Link } from 'react-router-dom'
 import { ROUTES } from '../../routes/paths'
 import { useProfileStore } from '../../store/useProfileStore'
-import { hexToRgba, getContrastColor, getBorderColor } from '../../utils/colors'
-import { Settings } from 'lucide-react' // Importando o ícone de engrenagem
+import { hexToRgba, getContrastColor } from '../../utils/colors'
+import { Settings } from 'lucide-react'
 
 export default function Header() {
   const location = useLocation()
   const theme = useProfileStore((state) => state.profile.theme)
 
+  // Rotas onde o Header não deve aparecer
   const transparentHeaderRoutes: string[] = [ROUTES.SEARCH, ROUTES.ACCESS]
   if (transparentHeaderRoutes.includes(location.pathname)) return null
 
   // Cores dinâmicas
   const textColor = getContrastColor(theme.navbar)
-  const borderColor = getBorderColor(theme.background)
 
   return (
     <header
-      className="fixed top-0 left-0 right-0 h-16 backdrop-blur-xl border-b z-50 flex items-center justify-between px-6 max-w-[100vw] overflow-hidden"
+      className="
+        fixed
+        top-0
+        left-0
+        right-0
+        h-16
+        backdrop-blur-xl
+        border-b
+        z-[100]
+        flex
+        items-center
+        justify-between
+        px-6
+        w-full
+        transition-all
+        duration-300
+      "
       style={{
-        backgroundColor: hexToRgba(theme.navbar, 0.6),
-        borderColor: borderColor
+        backgroundColor: hexToRgba(theme.navbar, 0.7), // Opacidade levemente maior para leitura no scroll
+        borderColor: hexToRgba(textColor, 0.08)
       }}
     >
-      <div className="flex items-center gap-2">
+      {/* Lado Esquerdo: Logo e Identidade */}
+      <div className="flex items-center gap-3">
         {/* Logo Container */}
         <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300"
+          className="w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-300 shadow-lg"
           style={{
             backgroundColor: theme.primary,
-            boxShadow: `0 0 20px ${hexToRgba(theme.primary, 0.4)}`
+            boxShadow: `0 8px 16px ${hexToRgba(theme.primary, 0.2)}`
           }}
         >
           <span
@@ -40,28 +57,33 @@ export default function Header() {
           </span>
         </div>
 
-        <h1
-          className="text-lg font-bold bg-clip-text text-transparent italic bg-gradient-to-r"
-          style={{ backgroundImage: `linear-gradient(to right, ${textColor}, ${hexToRgba(textColor, 0.5)})` }}
-        >
-          NextArc
-        </h1>
+        <div className="flex flex-col">
+          <h1
+            className="text-lg font-black italic leading-none tracking-tight"
+            style={{ color: textColor }}
+          >
+            NextArc
+          </h1>
+        </div>
       </div>
 
-      {/* Botão de Configurações */}
-      <Link
-        to={ROUTES.SETTINGS}
-        className="p-2 rounded-xl transition-all duration-300 hover:scale-110 active:scale-95 group"
-        style={{
-          backgroundColor: hexToRgba(textColor, 0.05),
-          color: textColor
-        }}
-      >
-        <Settings
-          size={20}
-          className="group-hover:rotate-90 transition-transform duration-500 ease-in-out"
-        />
-      </Link>
+      {/* Lado Direito: Ações */}
+      <div className="flex items-center gap-2">
+        <Link
+          to={ROUTES.SETTINGS}
+          className="p-2.5 rounded-2xl transition-all duration-300 hover:scale-110 active:scale-95 group backdrop-blur-md"
+          style={{
+            backgroundColor: hexToRgba(textColor, 0.05),
+            color: textColor,
+            border: `1px solid ${hexToRgba(textColor, 0.1)}`
+          }}
+        >
+          <Settings
+            size={18}
+            className="group-hover:rotate-45 transition-transform duration-500 ease-in-out"
+          />
+        </Link>
+      </div>
     </header>
   )
 }

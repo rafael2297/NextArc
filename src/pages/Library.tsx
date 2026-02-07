@@ -136,7 +136,7 @@ export default function Library() {
               style={{ backgroundColor: `${currentTheme.primary}20`, color: currentTheme.primary, border: `1px solid ${currentTheme.primary}40` }}>
               Library Collection
             </div>
-            <h1 className="text-4xl font-black tracking-tighter italic uppercase" style={{ color: isLight ? '#000' : '#fff' }}>ArcTrack</h1>
+            <h1 className="text-4xl font-black tracking-tighter italic uppercase" style={{ color: isLight ? '#000' : '#fff' }}>Biblioteca</h1>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">

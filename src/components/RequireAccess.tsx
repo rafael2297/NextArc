@@ -10,6 +10,12 @@ type Props = {
 
 export default function RequireAccess({ children }: Props) {
     const hasAccess = useSessionStore((state) => state.hasAccess)
+    const hasHydrated = useSessionStore.persist.hasHydrated()
+
+
+    if (!hasHydrated) {
+        return null 
+    }
 
     if (!hasAccess) {
         return <Navigate to={ROUTES.ACCESS} replace />

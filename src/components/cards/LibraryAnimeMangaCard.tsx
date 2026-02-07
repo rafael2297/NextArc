@@ -1,4 +1,4 @@
-import { useState, type MouseEvent, type ChangeEvent } from 'react'
+import { useState, useEffect, type MouseEvent, type ChangeEvent } from 'react'
 import { Pencil, Trash2, Plus, Check } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -50,6 +50,25 @@ export default function LibraryAnimeMangaCard(props: Props) {
         onChangeTotal,
         onRemove,
     } = props
+
+    // --- LÓGICA DE DEBOUNCE E CORREÇÃO DE NaN ---
+    const [localCurrent, setLocalCurrent] = useState(current)
+
+    // Sincroniza o valor local caso o valor externo mude
+    useEffect(() => {
+        setLocalCurrent(current)
+    }, [current])
+
+    // Salva no drive após 1.5s sem novas alterações
+    useEffect(() => {
+        if (localCurrent === current) return
+
+        const handler = setTimeout(() => {
+            onChangeCurrent(localCurrent)
+        }, 1500)
+
+        return () => clearTimeout(handler)
+    }, [localCurrent, onChangeCurrent, current])
 
     // --- LÓGICA DE CORES DINÂMICAS ---
     const primaryColor = profile?.theme?.primary || '#3b82f6'
@@ -150,7 +169,7 @@ export default function LibraryAnimeMangaCard(props: Props) {
                                     </span>
                                     <div className="flex items-baseline gap-1">
                                         <span className="text-2xl font-black tracking-tighter" style={{ color: isLight ? '#000' : '#fff' }}>
-                                            {current}
+                                            {localCurrent}
                                         </span>
                                         <span className="text-xs text-zinc-500 font-bold">
                                             / {total || '∞'}
@@ -166,7 +185,11 @@ export default function LibraryAnimeMangaCard(props: Props) {
                                         <Pencil size={16} />
                                     </button>
                                     <button
-                                        onClick={(e) => { stop(e); onChangeCurrent(current + 1); }}
+                                        onClick={(e) => { 
+                                            stop(e); 
+                                            const nextVal = (Number(localCurrent) || 0) + 1;
+                                            setLocalCurrent(nextVal);
+                                        }}
                                         className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-lg"
                                         style={{ backgroundColor: primaryColor, color: '#fff' }}
                                     >
@@ -181,7 +204,7 @@ export default function LibraryAnimeMangaCard(props: Props) {
                                 <motion.div
                                     initial={{ width: 0 }}
                                     animate={{
-                                        width: `${Math.min((current / (total || 1)) * 100, 100)}%`,
+                                        width: `${Math.min(((Number(localCurrent) || 0) / (total || 1)) * 100, 100)}%`,
                                     }}
                                     className="h-full"
                                     style={{
@@ -203,9 +226,9 @@ export default function LibraryAnimeMangaCard(props: Props) {
                                     <label className="text-[8px] font-black text-zinc-500 uppercase ml-1 tracking-widest">Atual</label>
                                     <input
                                         type="number"
-                                        value={current}
+                                        value={localCurrent}
                                         onClick={stop}
-                                        onChange={(e) => onChangeCurrent(Number(e.target.value))}
+                                        onChange={(e) => setLocalCurrent(Number(e.target.value) || 0)}
                                         className="w-full border rounded-xl px-3 py-2 text-sm font-bold outline-none transition-colors"
                                         style={{
                                             backgroundColor: isLight ? '#fff' : '#09090b',
@@ -220,7 +243,7 @@ export default function LibraryAnimeMangaCard(props: Props) {
                                         type="number"
                                         value={total}
                                         onClick={stop}
-                                        onChange={(e) => onChangeTotal(Number(e.target.value))}
+                                        onChange={(e) => onChangeTotal(Number(e.target.value) || 0)}
                                         className="w-full border rounded-xl px-3 py-2 text-sm font-bold outline-none transition-colors"
                                         style={{
                                             backgroundColor: isLight ? '#fff' : '#09090b',
@@ -262,7 +285,11 @@ export default function LibraryAnimeMangaCard(props: Props) {
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={(e) => { stop(e); setEditing(false); }}
+                                    onClick={(e) => { 
+                                        stop(e); 
+                                        onChangeCurrent(localCurrent); // Salva imediatamente ao confirmar
+                                        setEditing(false); 
+                                    }}
                                     className="flex-1 py-2 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 shadow-lg"
                                     style={{ backgroundColor: isLight ? '#000' : '#fff', color: isLight ? '#fff' : '#000' }}
                                 >

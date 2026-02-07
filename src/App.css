@@ -1,8 +1,6 @@
-/* Variáveis Globais */
 :root {
-  /* Cor padrão (Cyber Blue) caso não haja nenhuma salva */
-  --color-bg: #000000;
-  --color-nav: #111111;
+  --color-bg: #0f1115;
+  --color-nav: rgba(17, 17, 17, 0.8);
   --color-primary: #3b82f6;
   --color-primary-glow: rgba(59, 130, 246, 0.35);
 
@@ -12,108 +10,90 @@
 
   color-scheme: dark;
   color: rgba(255, 255, 255, 0.87);
-  background-color: var(--color-bg);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-
-  /* Trava de segurança para scroll horizontal */
-  overflow-x: hidden;
 }
 
-/* Reset de Box Model para evitar que paddings aumentem a largura dos elementos */
-*,
-*::before,
-*::after {
+*, *::before, *::after {
   box-sizing: border-box;
 }
 
-html,
-body {
-  width: 100%;
-  max-width: 100vw;
-  overflow-x: hidden;
-  /* Mata o scroll horizontal no nível raiz */
+html, body, #root {
+  height: 100%;
   margin: 0;
   padding: 0;
+  overflow: hidden !important;
+  background-color: var(--color-bg);
 }
 
 body {
+  width: 100%;
+  color: white;
+}
+
+/* --- ESTRUTURA DE LAYOUT --- */
+
+#main-content {
   display: flex;
   flex-direction: column;
-  /* Organiza melhor o layout flex */
-  min-width: 320px;
-  min-height: 100vh;
-  background-color: var(--color-bg);
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
   position: relative;
 }
 
-#root {
-  width: 100%;
-  max-width: 100vw;
-  margin: 0;
-  padding: 0;
-  text-align: left;
+header {
+  position: fixed; /* Header fixado no topo */
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 64px;
+  z-index: 100; /* Garante que fique acima de tudo */
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+main {
+  flex: 1;
+  overflow-y: auto;
   overflow-x: hidden;
-  /* Segunda trava de segurança */
+  display: flex;
+  flex-direction: column;
+  /* O preenchimento superior deve ser igual à altura do Header (64px) 
+     para o conteúdo não começar debaixo dele */
+  padding-top: 64px; 
 }
 
-/* --- ELEMENTOS DO TEMA --- */
-
-header,
-nav,
 .bottom-nav {
-  background-color: var(--color-nav);
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 64px;
+  z-index: 100;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
-/* Utilitário para esconder a barra de rolagem */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
+/* --- SCROLLBAR --- */
+
+main::-webkit-scrollbar {
+  width: 8px;
 }
 
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+main::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-/* Seleção de texto com a cor primária */
-::selection {
-  background-color: var(--color-primary);
-  color: #000;
+main::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
 }
 
-/* --- TRANSIÇÕES E ANIMAÇÕES --- */
-
-/* Transição suave para cores (evite usar '*' para performance, foque nos principais) */
-body,
-nav,
-header,
-div,
-section,
-button,
-span,
-p,
-h1,
-h2,
-h3 {
-  transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-    border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-    color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-    box-shadow 0.4s ease;
-}
-
-/* Estilo para links e interativos */
-button {
-  cursor: pointer;
-}
-
-/* Suporte para temas Light/Dark caso você use o atributo style no root */
-:root[style*="color-scheme: light"] {
-  --color-text: #18181b;
-}
-
-:root[style*="color-scheme: dark"] {
-  --color-text: rgba(255, 255, 255, 0.87);
+main::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
 }

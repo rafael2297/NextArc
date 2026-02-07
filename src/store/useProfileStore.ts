@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, createJSONStorage } from 'zustand/middleware'
 
 export type AuthProvider = 'local' | 'google'
 
@@ -60,7 +60,6 @@ export const useProfileStore = create<ProfileStore>()(
                     profile: {
                         ...state.profile,
                         ...data,
-                        // Garante que se o data trouxer um theme parcial, ele mescle com o existente
                         theme: data.theme ? { ...state.profile.theme, ...data.theme } : state.profile.theme
                     },
                 })),
@@ -109,15 +108,16 @@ export const useProfileStore = create<ProfileStore>()(
         }),
         {
             name: 'profile-store',
-            // LÓGICA DE MIGRAÇÃO: Isso evita que o app quebre ao encontrar dados antigos
+            storage: createJSONStorage(() => localStorage),
             version: 1,
+            // 🛑 IMPEDE O ZUSTAND DE INICIAR SOZINHO (EVITA SOBREESCRITA)
+            skipHydration: true, 
             migrate: (persistedState: any, version: number) => {
-                if (version === 0 || !persistedState.profile?.theme) {
-                    // Se o usuário tinha a versão antiga, injetamos o objeto theme padrão
+                if (version === 0 || !persistedState?.profile?.theme) {
                     return {
                         ...persistedState,
                         profile: {
-                            ...persistedState.profile,
+                            ...(persistedState?.profile || defaultProfile),
                             theme: defaultProfile.theme
                         }
                     };

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, createJSONStorage } from 'zustand/middleware'
 
 export type SessionMode = 'guest' | 'authenticated'
 export type NSFWMode = 'show' | 'blur' | 'hide'
@@ -95,7 +95,9 @@ export const useSessionStore = create<SessionState>()(
         }),
         {
             name: 'anime-tracker-session',
-            version: 6,
+            
+            storage: createJSONStorage(() => localStorage),
+            skipHydration: true,
         }
     )
 )

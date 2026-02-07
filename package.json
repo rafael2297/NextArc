@@ -1,13 +1,16 @@
 {
-  "name": "site-anime-react",
-  "private": true,
-  "version": "0.0.0",
+  "name": "nesxtarc",
+  "version": "1.0.0",
   "type": "module",
+  "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
+    "build:web": "vite build",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "build": "npm run build:web && npm run build:electron && electron-builder",
+    "preview": "vite preview",
+    "electron:start": "electron .",
+    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://127.0.0.1:5173 && npm run electron:start\""
   },
   "dependencies": {
     "axios": "^1.7.9",
@@ -26,6 +29,9 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
     "autoprefixer": "^10.4.23",
+    "concurrently": "^9.1.0",
+    "electron": "^40.2.1",
+    "electron-builder": "^24.13.3",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
@@ -34,6 +40,38 @@
     "tailwindcss": "^3.4.19",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
-    "vite": "^7.2.4"
+    "vite": "^7.2.4",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.rafael.nesxtarc",
+    "productName": "NesxtArc",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "uninstallDisplayName": "NesxtArc",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }
