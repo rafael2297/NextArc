@@ -1,4 +1,6 @@
+# =========================
 # Logs
+# =========================
 logs
 *.log
 npm-debug.log*
@@ -7,33 +9,68 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# =========================
 # Dependencies
-node_modules
+# =========================
+node_modules/
 
-# Build outputs
-dist
-dist-ssr
-.vite
+# =========================
+# Vite / React build
+# =========================
+dist/
+dist-ssr/
+.vite/
 
+# =========================
+# Electron / Electron Builder
+# =========================
+dist-electron/
+release/
+build/
+out/
+win-unpacked/
+
+# Executáveis e artefatos de release
+*.exe
+*.msi
+*.dmg
+*.AppImage
+*.blockmap
+
+# =========================
 # Env files
+# =========================
 .env
 .env.*
 *.local
 
-# Cache
-.cache
+# =========================
+# Firebase
+# =========================
+.firebase/
+
+# =========================
+# Cache / Coverage
+# =========================
+.cache/
 .eslintcache
+coverage/
 
-# Test coverage
-coverage
-
-# Editor directories and files
+# =========================
+# Editor / OS
+# =========================
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
+Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# =========================
+# TypeScript
+# =========================
+*.tsbuildinfo
