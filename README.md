@@ -1,7 +1,3 @@
-Entendido, Rafael! Vou ajustar o README para refletir que a distribuição no PC é feita via executável (Instalador) disponível nas Releases do GitHub, facilitando a vida de quem não quer rodar comandos de terminal.
-
-Aqui está a versão corrigida e personalizada:
-
 ---
 
 # 🚀 Anime & Manga Tracker (PC Edition)
