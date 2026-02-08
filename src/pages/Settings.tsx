@@ -16,7 +16,7 @@ import {
     Image as ImageIcon,
     X,
     CloudUpload,
-    RefreshCw
+    RefreshCw,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useState, useRef } from 'react'
@@ -41,8 +41,8 @@ export default function Settings() {
         connectGoogle,
         disconnectGoogle,
         enableDrive,
-        exportToDrive, // Usando o nome correto exportado pelo controller
-        restoreFromDrive, // Adicionado para funcionalidade completa
+        exportToDrive, 
+        restoreFromDrive, 
         deleteAccount,
         animeList,
         mangaList,
@@ -65,7 +65,7 @@ export default function Settings() {
     const isLight = currentTheme.background.toLowerCase() === '#ffffff' || currentTheme.background.toLowerCase() === 'white';
 
     const handleRemoveBanner = () => {
-        updateBannerImage(null as any);
+        updateBannerImage(null);
     };
 
     const themePresets = [
@@ -121,8 +121,15 @@ export default function Settings() {
                     <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(to bottom, transparent, ${currentTheme.background})` }} />
                 </div>
                 <div className="relative z-10 text-center flex flex-col items-center">
-                    <img src={profile.avatar || `https://ui-avatars.com/api/?name=${profile.name}`} className="w-24 h-24 rounded-[2rem] object-cover border-4 shadow-2xl" style={{ borderColor: isLight ? '#fff' : '#111' }} alt="Avatar" />
-                    <h1 className="mt-4 text-2xl font-black italic uppercase tracking-tighter" style={{ color: isLight ? '#000' : '#fff' }}>{profile.name}</h1>
+                    <img 
+                        src={profile.avatar || `https://ui-avatars.com/api/?name=${profile.name}`} 
+                        className="w-24 h-24 rounded-[2rem] object-cover border-4 shadow-2xl" 
+                        style={{ borderColor: isLight ? '#fff' : '#111' }} 
+                        alt="Avatar" 
+                    />
+                    <h1 className="mt-4 text-2xl font-black italic uppercase tracking-tighter" style={{ color: isLight ? '#000' : '#fff' }}>
+                        {profile.name}
+                    </h1>
                 </div>
             </div>
 
@@ -143,7 +150,7 @@ export default function Settings() {
                     ))}
                 </section>
 
-                {/* PERSONALIZAÇÃO BÁSICA */}
+                {/* PERSONALIZAÇÃO */}
                 <section
                     className="backdrop-blur-xl border p-6 rounded-[2rem] shadow-2xl relative"
                     style={{
@@ -157,11 +164,8 @@ export default function Settings() {
                         <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em]">Estilo do App</h3>
                     </div>
 
-                    {/* GERENCIAMENTO DE IMAGEM DO BANNER */}
                     <div className="space-y-3 mb-8">
-                        <label className="text-[9px] font-black uppercase text-zinc-500 ml-2 tracking-widest">
-                            Imagem de Capa (Banner)
-                        </label>
+                        <label className="text-[9px] font-black uppercase text-zinc-500 ml-2 tracking-widest">Imagem de Capa (Banner)</label>
                         <div className="flex gap-2">
                             <button
                                 onClick={() => bannerInputRef.current?.click()}
@@ -192,15 +196,12 @@ export default function Settings() {
                         </div>
                     </div>
 
-                    {/* CUSTOM DROPDOWN SELECT */}
+                    {/* PRESETS DROPDOWN */}
                     <div className="space-y-2 mb-8 relative">
-                        <label className="text-[9px] font-black uppercase text-zinc-500 ml-2 tracking-widest">
-                            Presets de Estilo
-                        </label>
-
+                        <label className="text-[9px] font-black uppercase text-zinc-500 ml-2 tracking-widest">Presets de Estilo</label>
                         <button
                             onClick={() => setIsSelectOpen(!isSelectOpen)}
-                            className="w-full flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 outline-none"
+                            className="w-full flex items-center justify-between p-4 rounded-2xl border transition-all duration-300"
                             style={{
                                 backgroundColor: isLight ? '#f4f4f5' : '#09090b',
                                 borderColor: isSelectOpen ? currentTheme.primary : (isLight ? '#e4e4e7' : '#27272a'),
@@ -268,9 +269,9 @@ export default function Settings() {
                         </AnimatePresence>
                     </div>
 
-                    {/* PERSONALIZAÇÃO AVANÇADA */}
+                    {/* CORES MANUAIS */}
                     <div className="border-t pt-4" style={{ borderColor: isLight ? '#f4f4f5' : 'rgba(255,255,255,0.05)' }}>
-                        <button onClick={() => setIsAdvancedOpen(!isAdvancedOpen)} className="w-full flex items-center justify-between px-2 py-2 group">
+                        <button onClick={() => setIsAdvancedOpen(!isAdvancedOpen)} className="w-full flex items-center justify-between px-2 py-2">
                             <div className="flex items-center gap-3">
                                 <Settings2 size={14} className="text-zinc-500" />
                                 <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Ajuste Manual de Cores</span>
@@ -317,7 +318,7 @@ export default function Settings() {
                     }}>
                     <div className="flex items-center gap-3 mb-6 px-2">
                         <EyeOff size={18} className="text-rose-500" />
-                        <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em]">Privacidade</h3>
+                        <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em]">Privacidade (NSFW)</h3>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                         {['hide', 'blur', 'show'].map((mode) => (
@@ -338,7 +339,7 @@ export default function Settings() {
                     </div>
                 </section>
 
-                {/* DADOS & SINCRONIZAÇÃO */}
+                {/* SINCRONIZAÇÃO */}
                 <section className="backdrop-blur-xl border rounded-[2rem] p-6 space-y-4"
                     style={{
                         backgroundColor: isLight ? '#ffffff' : 'rgba(24, 24, 27, 0.4)',
@@ -348,9 +349,17 @@ export default function Settings() {
                     <div className="flex items-center justify-between px-2">
                         <div className="flex items-center gap-4">
                             <Database size={20} style={{ color: currentTheme.primary }} />
-                            <h3 className="text-xs font-black uppercase tracking-tight" style={{ color: isLight ? '#000' : '#fff' }}>Sincronização Nuvem</h3>
+                            <div>
+                                <h3 className="text-xs font-black uppercase tracking-tight" style={{ color: isLight ? '#000' : '#fff' }}>Google Drive</h3>
+                                <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-tighter">Backup Automático em Nuvem</p>
+                            </div>
                         </div>
-                        <button onClick={enableDrive} className="w-12 h-6 rounded-full relative transition-all shadow-lg" style={{ backgroundColor: driveEnabled ? currentTheme.primary : (isLight ? '#e4e4e7' : '#27272a') }}>
+                        <button 
+                            onClick={enableDrive} 
+                            disabled={isSaving}
+                            className="w-12 h-6 rounded-full relative transition-all shadow-lg disabled:opacity-50" 
+                            style={{ backgroundColor: driveEnabled ? currentTheme.primary : (isLight ? '#e4e4e7' : '#27272a') }}
+                        >
                             <motion.div animate={{ x: driveEnabled ? 26 : 4 }} className="absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm" />
                         </button>
                     </div>
@@ -367,7 +376,7 @@ export default function Settings() {
                                     <button
                                         onClick={() => exportToDrive()}
                                         disabled={isSaving}
-                                        className="py-4 rounded-2xl flex items-center justify-center gap-2 border border-dashed transition-all active:scale-95 disabled:opacity-50"
+                                        className="py-4 rounded-2xl flex items-center justify-center gap-2 border border-dashed transition-all active:scale-95 disabled:grayscale"
                                         style={{
                                             borderColor: currentTheme.primary,
                                             color: currentTheme.primary,
@@ -375,16 +384,20 @@ export default function Settings() {
                                         }}
                                     >
                                         <CloudUpload size={16} className={isSaving ? 'animate-bounce' : ''} />
-                                        <span className="text-[10px] font-black uppercase tracking-widest">Backup</span>
+                                        <span className="text-[10px] font-black uppercase tracking-widest">
+                                            {isSaving ? 'Salvando...' : 'Backup Agora'}
+                                        </span>
                                     </button>
 
                                     <button
-                                        onClick={() => restoreFromDrive?.()}
+                                        onClick={() => restoreFromDrive()}
                                         disabled={isSaving}
                                         className="py-4 rounded-2xl flex items-center justify-center gap-2 border border-dashed transition-all active:scale-95 disabled:opacity-50 text-zinc-500 border-zinc-500/30 bg-zinc-500/5"
                                     >
                                         <RefreshCw size={16} className={isSaving ? 'animate-spin' : ''} />
-                                        <span className="text-[10px] font-black uppercase tracking-widest">Restaurar</span>
+                                        <span className="text-[10px] font-black uppercase tracking-widest">
+                                            {isSaving ? 'Baixando...' : 'Restaurar'}
+                                        </span>
                                     </button>
                                 </div>
                             </motion.div>
@@ -397,18 +410,25 @@ export default function Settings() {
                     </div>
                 </section>
 
-                {/* CONTA */}
+                {/* CONTA & PERIGO */}
                 <div className="pt-8 space-y-3 pb-20 text-center">
                     <AccountSection />
-                    <button onClick={profile.provider === 'google' ? disconnectGoogle : connectGoogle} className="w-full py-5 rounded-3xl font-black uppercase tracking-widest text-xs transition-all border shadow-lg"
+                    <button 
+                        onClick={profile.provider === 'google' ? disconnectGoogle : connectGoogle} 
+                        className="w-full py-5 rounded-3xl font-black uppercase tracking-widest text-xs transition-all border shadow-lg"
                         style={{
                             backgroundColor: profile.provider === 'google' ? 'transparent' : (isLight ? '#000' : '#fff'),
                             color: profile.provider === 'google' ? '#71717a' : (isLight ? '#fff' : '#000'),
                             borderColor: isLight ? '#e4e4e7' : '#27272a'
-                        }}>
-                        {profile.provider === 'google' ? 'Encerrar Sessão' : 'Vincular com Google'}
+                        }}
+                    >
+                        {profile.provider === 'google' ? 'Desconectar Conta Google' : 'Vincular com Google'}
                     </button>
-                    <button onClick={deleteAccount} className="w-full py-4 text-zinc-500 hover:text-red-500 transition-colors font-bold uppercase text-[9px] tracking-widest flex items-center justify-center gap-2">
+                    
+                    <button 
+                        onClick={deleteAccount} 
+                        className="w-full py-4 text-zinc-500 hover:text-red-500 transition-colors font-bold uppercase text-[9px] tracking-widest flex items-center justify-center gap-2"
+                    >
                         <Trash2 size={12} /> Excluir Conta Permanentemente
                     </button>
                 </div>
