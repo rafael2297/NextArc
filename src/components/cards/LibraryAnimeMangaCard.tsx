@@ -35,7 +35,7 @@ export default function LibraryAnimeMangaCard(props: Props) {
     const { profile } = useProfileController()
     const [editing, setEditing] = useState(false)
 
-    // Puxando o nsfwMode correto da sua SessionStore
+    // Puxando as configurações de sessão
     const { nsfwMode } = useSessionStore()
 
     const {
@@ -51,12 +51,19 @@ export default function LibraryAnimeMangaCard(props: Props) {
         onRemove,
     } = props
 
+    /* -----------------------------------------------------------
+       🛡️ BLINDAGEM CONTRA NaN (Not a Number)
+       Garante que os cálculos sempre usem números válidos.
+    ----------------------------------------------------------- */
+    const safeCurrent = Number(current) || 0;
+    const safeTotal = Number(total) || 0;
+
     // --- LÓGICA DE CORES DINÂMICAS ---
     const primaryColor = profile?.theme?.primary || '#3b82f6'
     const bgColor = profile?.theme?.background || '#000000'
     const isLight = bgColor.toLowerCase() === '#ffffff' || bgColor.toLowerCase() === 'white'
 
-    // --- LÓGICA NSFW BASEADA NA SUA STORE ---
+    // --- LÓGICA NSFW ---
     const hideCard = isNSFW && nsfwMode === 'hide'
     const blurCard = isNSFW && nsfwMode === 'blur'
 
@@ -69,7 +76,6 @@ export default function LibraryAnimeMangaCard(props: Props) {
         onChangeStatus(e.target.value as AnimeStatus | ReadingStatus)
     }
 
-    // Cores de status adaptativas
     const getStatusStyle = (s: string) => {
         switch (s) {
             case 'completed': return { bg: '#10b981', text: '#fff' }
@@ -82,7 +88,6 @@ export default function LibraryAnimeMangaCard(props: Props) {
 
     const currentStatusStyle = getStatusStyle(status)
 
-    // 🔴 Early return se o card deve ser ocultado
     if (hideCard) return null
 
     return (
@@ -93,7 +98,7 @@ export default function LibraryAnimeMangaCard(props: Props) {
                 borderColor: isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.08)'
             }}
         >
-            {/* 🔞 Overlay NSFW (Apenas se o modo for 'blur') */}
+            {/* 🔞 Overlay NSFW */}
             {blurCard && (
                 <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xl rounded-[2rem]">
                     <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/50">
@@ -119,7 +124,7 @@ export default function LibraryAnimeMangaCard(props: Props) {
 
                 <div className="absolute inset-0 z-20 bg-gradient-to-t from-black via-transparent to-transparent opacity-80" />
 
-                {/* Badge de Status Dinâmico */}
+                {/* Badge de Status */}
                 <span
                     className="absolute top-3 right-3 z-30 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-lg"
                     style={{ backgroundColor: currentStatusStyle.bg, color: currentStatusStyle.text }}
@@ -150,10 +155,10 @@ export default function LibraryAnimeMangaCard(props: Props) {
                                     </span>
                                     <div className="flex items-baseline gap-1">
                                         <span className="text-2xl font-black tracking-tighter" style={{ color: isLight ? '#000' : '#fff' }}>
-                                            {current}
+                                            {safeCurrent}
                                         </span>
                                         <span className="text-xs text-zinc-500 font-bold">
-                                            / {total || '∞'}
+                                            / {safeTotal || '∞'}
                                         </span>
                                     </div>
                                 </div>
@@ -166,7 +171,11 @@ export default function LibraryAnimeMangaCard(props: Props) {
                                         <Pencil size={16} />
                                     </button>
                                     <button
-                                        onClick={(e) => { stop(e); onChangeCurrent(current + 1); }}
+                                        onClick={(e) => {
+                                            stop(e);
+                                            // ✅ Soma garantida sem NaN
+                                            onChangeCurrent(safeCurrent + 1);
+                                        }}
                                         className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-lg"
                                         style={{ backgroundColor: primaryColor, color: '#fff' }}
                                     >
@@ -176,12 +185,12 @@ export default function LibraryAnimeMangaCard(props: Props) {
                                 </div>
                             </div>
 
-                            {/* Barra de Progresso Dinâmica */}
+                            {/* Barra de Progresso */}
                             <div className="h-1.5 w-full rounded-full overflow-hidden" style={{ backgroundColor: isLight ? '#e4e4e7' : '#18181b' }}>
                                 <motion.div
                                     initial={{ width: 0 }}
                                     animate={{
-                                        width: `${Math.min((current / (total || 1)) * 100, 100)}%`,
+                                        width: `${Math.min((safeCurrent / (safeTotal || 1)) * 100, 100)}%`,
                                     }}
                                     className="h-full"
                                     style={{
@@ -205,8 +214,9 @@ export default function LibraryAnimeMangaCard(props: Props) {
                                         type="number"
                                         value={current}
                                         onClick={stop}
-                                        onChange={(e) => onChangeCurrent(Number(e.target.value))}
-                                        className="w-full border rounded-xl px-3 py-2 text-sm font-bold outline-none transition-colors"
+                                        // ✅ Filtro para garantir que apenas números entrem na store
+                                        onChange={(e) => onChangeCurrent(Number(e.target.value) || 0)}
+                                        className="w-full border rounded-xl px-3 py-2 text-sm font-bold outline-none"
                                         style={{
                                             backgroundColor: isLight ? '#fff' : '#09090b',
                                             borderColor: isLight ? '#e4e4e7' : '#27272a',
@@ -220,8 +230,8 @@ export default function LibraryAnimeMangaCard(props: Props) {
                                         type="number"
                                         value={total}
                                         onClick={stop}
-                                        onChange={(e) => onChangeTotal(Number(e.target.value))}
-                                        className="w-full border rounded-xl px-3 py-2 text-sm font-bold outline-none transition-colors"
+                                        onChange={(e) => onChangeTotal(Number(e.target.value) || 0)}
+                                        className="w-full border rounded-xl px-3 py-2 text-sm font-bold outline-none"
                                         style={{
                                             backgroundColor: isLight ? '#fff' : '#09090b',
                                             borderColor: isLight ? '#e4e4e7' : '#27272a',
