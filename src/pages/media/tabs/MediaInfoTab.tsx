@@ -4,7 +4,7 @@ import type {
     JikanTag
 } from '../../../services/jikanApi'
 import { useTranslatedText } from '../../../hooks/useTranslatedText'
-import { Languages, Info, Star, Hash, PlayCircle, BookOpen } from 'lucide-react'
+import { Languages, Info, Youtube } from 'lucide-react'
 import { useProfileStore } from '../../../store/useProfileStore'
 import { hexToRgba, getContrastColor } from '../../../utils/colors'
 
@@ -19,7 +19,6 @@ interface TagWithType extends JikanTag {
 }
 
 export default function MediaInfoTab({ data }: Props) {
-    // Acessando o tema global
     const theme = useProfileStore((state) => state.profile.theme)
     const textColor = getContrastColor(theme.background)
 
@@ -40,7 +39,22 @@ export default function MediaInfoTab({ data }: Props) {
         ...data.demographics.map((d): TagWithType => ({ ...d, type: 'demographic' })),
     ]
 
-    // Cores das Tags baseadas no tema
+    // Higienização da URL do Trailer (YouTube)
+    const getSafeTrailerUrl = () => {
+        if ('trailer' in data && data.trailer?.embed_url) {
+            const url = new URL(data.trailer.embed_url);
+            // Garante o uso do domínio nocookie e remove sugestões de vídeos ao final
+            url.hostname = 'www.youtube-nocookie.com';
+            url.searchParams.set('rel', '0');
+            url.searchParams.set('enablejsapi', '1');
+            url.searchParams.set('origin', window.location.origin);
+            return url.toString();
+        }
+        return null;
+    }
+
+    const trailerUrl = getSafeTrailerUrl();
+
     const getTagStyle = (type: TagType) => {
         switch (type) {
             case 'genre':
@@ -51,13 +65,13 @@ export default function MediaInfoTab({ data }: Props) {
                 }
             case 'theme':
                 return {
-                    backgroundColor: hexToRgba('#10b981', 0.1), // Emerald 
+                    backgroundColor: hexToRgba('#10b981', 0.1),
                     color: '#10b981',
                     borderColor: hexToRgba('#10b981', 0.2)
                 }
             case 'demographic':
                 return {
-                    backgroundColor: hexToRgba('#f59e0b', 0.1), // Amber
+                    backgroundColor: hexToRgba('#f59e0b', 0.1),
                     color: '#f59e0b',
                     borderColor: hexToRgba('#f59e0b', 0.2)
                 }
@@ -72,6 +86,8 @@ export default function MediaInfoTab({ data }: Props) {
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
+
+
             {/* TAGS */}
             {tags.length > 0 && (
                 <div className="flex flex-wrap gap-2">
@@ -125,47 +141,6 @@ export default function MediaInfoTab({ data }: Props) {
                 >
                     {text || 'Nenhuma sinopse disponível.'}
                 </p>
-            </div>
-
-            {/* GRID DE INFOS */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                {[
-                    {
-                        label: 'Score',
-                        value: data.score ?? 'N/A',
-                        icon: <Star size={12} className="fill-amber-500 text-amber-500" />
-                    },
-                    {
-                        label: 'Ranking',
-                        value: data.rank ? `#${data.rank}` : 'N/A',
-                        icon: <Hash size={12} style={{ color: theme.primary }} />
-                    },
-                    {
-                        label: 'episodes' in data ? 'Episódios' : 'Capítulos',
-                        value: ('episodes' in data ? data.episodes : (data as JikanManga).chapters) ?? '?',
-                        icon: 'episodes' in data ? <PlayCircle size={12} /> : <BookOpen size={12} />
-                    },
-                    {
-                        label: 'Status',
-                        value: (data as any).status ?? 'Desconhecido',
-                        icon: <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: theme.primary }} />
-                    }
-                ].map((item, idx) => (
-                    <div
-                        key={idx}
-                        className="p-4 rounded-2xl border transition-all"
-                        style={{
-                            backgroundColor: hexToRgba(theme.navbar, 0.4),
-                            borderColor: hexToRgba(textColor, 0.05)
-                        }}
-                    >
-                        <div className="flex items-center gap-2 mb-1 opacity-50" style={{ color: textColor }}>
-                            {item.icon}
-                            <span className="text-[9px] font-black uppercase tracking-tighter">{item.label}</span>
-                        </div>
-                        <p className="text-lg font-black" style={{ color: textColor }}>{item.value}</p>
-                    </div>
-                ))}
             </div>
         </div>
     )

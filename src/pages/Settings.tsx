@@ -17,6 +17,7 @@ import {
     X,
     CloudUpload,
     RefreshCw,
+    AlertCircle,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useState, useRef } from 'react'
@@ -27,9 +28,11 @@ import { useProfileController } from '../hooks/useSettingsController'
 import { useSessionStore } from '../store/useSessionStore'
 import { ROUTES } from '../routes/paths'
 import { hexToRgba } from '../utils/colors'
+import { useToast } from '../components/toast/useToast'
 
 export default function Settings() {
     const navigate = useNavigate()
+    const { showToast } = useToast()
     const fileInputRef = useRef<HTMLInputElement>(null)
     const bannerInputRef = useRef<HTMLInputElement>(null)
     const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
@@ -41,8 +44,8 @@ export default function Settings() {
         connectGoogle,
         disconnectGoogle,
         enableDrive,
-        exportToDrive, 
-        restoreFromDrive, 
+        exportToDrive,
+        restoreFromDrive,
         deleteAccount,
         animeList,
         mangaList,
@@ -56,6 +59,9 @@ export default function Settings() {
 
     const { nsfwMode, setNSFWMode } = useSessionStore()
 
+    // Lógica para detectar se o token parece expirado ou inválido
+    const isTokenInvalid = !profile.accessToken || profile.accessToken.includes('nesxtarc://');
+
     const currentTheme = {
         primary: profile?.theme?.primary || '#3b82f6',
         background: profile?.theme?.background || '#000000',
@@ -66,6 +72,19 @@ export default function Settings() {
 
     const handleRemoveBanner = () => {
         updateBannerImage(null);
+    };
+
+    // Função aprimorada para Backup Manual
+    const handleManualBackup = async () => {
+        try {
+            await exportToDrive();
+        } catch (error: any) {
+            // Se o erro for de autenticação, tentamos reconectar
+            if (error.message?.includes('401') || error.message?.includes('auth')) {
+                showToast("Sessão expirada. Reconectando...", "info");
+                connectGoogle();
+            }
+        }
     };
 
     const themePresets = [
@@ -121,11 +140,11 @@ export default function Settings() {
                     <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(to bottom, transparent, ${currentTheme.background})` }} />
                 </div>
                 <div className="relative z-10 text-center flex flex-col items-center">
-                    <img 
-                        src={profile.avatar || `https://ui-avatars.com/api/?name=${profile.name}`} 
-                        className="w-24 h-24 rounded-[2rem] object-cover border-4 shadow-2xl" 
-                        style={{ borderColor: isLight ? '#fff' : '#111' }} 
-                        alt="Avatar" 
+                    <img
+                        src={profile.avatar || `https://ui-avatars.com/api/?name=${profile.name}`}
+                        className="w-24 h-24 rounded-[2rem] object-cover border-4 shadow-2xl"
+                        style={{ borderColor: isLight ? '#fff' : '#111' }}
+                        alt="Avatar"
                     />
                     <h1 className="mt-4 text-2xl font-black italic uppercase tracking-tighter" style={{ color: isLight ? '#000' : '#fff' }}>
                         {profile.name}
@@ -348,16 +367,18 @@ export default function Settings() {
 
                     <div className="flex items-center justify-between px-2">
                         <div className="flex items-center gap-4">
-                            <Database size={20} style={{ color: currentTheme.primary }} />
+                            <Database size={20} style={{ color: isTokenInvalid ? '#f59e0b' : currentTheme.primary }} />
                             <div>
                                 <h3 className="text-xs font-black uppercase tracking-tight" style={{ color: isLight ? '#000' : '#fff' }}>Google Drive</h3>
-                                <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-tighter">Backup Automático em Nuvem</p>
+                                <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-tighter">
+                                    {isTokenInvalid ? 'Sessão Expirada' : 'Backup Automático em Nuvem'}
+                                </p>
                             </div>
                         </div>
-                        <button 
-                            onClick={enableDrive} 
+                        <button
+                            onClick={enableDrive}
                             disabled={isSaving}
-                            className="w-12 h-6 rounded-full relative transition-all shadow-lg disabled:opacity-50" 
+                            className="w-12 h-6 rounded-full relative transition-all shadow-lg disabled:opacity-50"
                             style={{ backgroundColor: driveEnabled ? currentTheme.primary : (isLight ? '#e4e4e7' : '#27272a') }}
                         >
                             <motion.div animate={{ x: driveEnabled ? 26 : 4 }} className="absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm" />
@@ -372,20 +393,27 @@ export default function Settings() {
                                 exit={{ opacity: 0, height: 0 }}
                                 className="space-y-2 overflow-hidden"
                             >
+                                {isTokenInvalid && (
+                                    <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-3 mb-2">
+                                        <AlertCircle size={16} className="text-amber-500 shrink-0" />
+                                        <p className="text-[9px] font-bold text-amber-500 uppercase leading-tight">Sua sessão expirou. Clique em Backup para reconectar com segurança.</p>
+                                    </div>
+                                )}
+
                                 <div className="grid grid-cols-2 gap-2">
                                     <button
-                                        onClick={() => exportToDrive()}
+                                        onClick={handleManualBackup}
                                         disabled={isSaving}
                                         className="py-4 rounded-2xl flex items-center justify-center gap-2 border border-dashed transition-all active:scale-95 disabled:grayscale"
                                         style={{
-                                            borderColor: currentTheme.primary,
-                                            color: currentTheme.primary,
-                                            backgroundColor: `${currentTheme.primary}10`
+                                            borderColor: isTokenInvalid ? '#f59e0b' : currentTheme.primary,
+                                            color: isTokenInvalid ? '#f59e0b' : currentTheme.primary,
+                                            backgroundColor: isTokenInvalid ? '#f59e0b10' : `${currentTheme.primary}10`
                                         }}
                                     >
                                         <CloudUpload size={16} className={isSaving ? 'animate-bounce' : ''} />
                                         <span className="text-[10px] font-black uppercase tracking-widest">
-                                            {isSaving ? 'Salvando...' : 'Backup Agora'}
+                                            {isSaving ? 'Salvando...' : isTokenInvalid ? 'Reconectar & Salvar' : 'Backup Agora'}
                                         </span>
                                     </button>
 
@@ -413,8 +441,8 @@ export default function Settings() {
                 {/* CONTA & PERIGO */}
                 <div className="pt-8 space-y-3 pb-20 text-center">
                     <AccountSection />
-                    <button 
-                        onClick={profile.provider === 'google' ? disconnectGoogle : connectGoogle} 
+                    <button
+                        onClick={profile.provider === 'google' ? disconnectGoogle : connectGoogle}
                         className="w-full py-5 rounded-3xl font-black uppercase tracking-widest text-xs transition-all border shadow-lg"
                         style={{
                             backgroundColor: profile.provider === 'google' ? 'transparent' : (isLight ? '#000' : '#fff'),
@@ -424,9 +452,9 @@ export default function Settings() {
                     >
                         {profile.provider === 'google' ? 'Desconectar Conta Google' : 'Vincular com Google'}
                     </button>
-                    
-                    <button 
-                        onClick={deleteAccount} 
+
+                    <button
+                        onClick={deleteAccount}
                         className="w-full py-4 text-zinc-500 hover:text-red-500 transition-colors font-bold uppercase text-[9px] tracking-widest flex items-center justify-center gap-2"
                     >
                         <Trash2 size={12} /> Excluir Conta Permanentemente

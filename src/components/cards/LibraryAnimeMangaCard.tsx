@@ -1,10 +1,12 @@
-import { useState, useEffect, type MouseEvent, type ChangeEvent } from 'react'
+import { useState, useEffect, type MouseEvent } from 'react'
 import { Pencil, Trash2, Plus, Check } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
 
 import type { AnimeStatus, ReadingStatus } from '../../store/useAppStore'
 import { useSessionStore } from '../../store/useSessionStore'
 import { useProfileController } from '../../hooks/useSettingsController'
+import { useAppStore } from '../../store/useAppStore'
 
 const statusLabel = {
     watching: 'Assistindo',
@@ -32,76 +34,79 @@ type Props = {
 }
 
 export default function LibraryAnimeMangaCard(props: Props) {
+    const navigate = useNavigate()
     const { profile } = useProfileController()
-    const [editing, setEditing] = useState(false)
-
-    // Puxando o nsfwMode correto da sua SessionStore
     const { nsfwMode } = useSessionStore()
 
-    const {
-        title,
-        image,
-        status,
-        current,
-        total,
-        isNSFW = false,
-        onChangeStatus,
-        onChangeCurrent,
-        onChangeTotal,
-        onRemove,
-    } = props
+    const [editing, setEditing] = useState(false)
 
-    // --- LÓGICA DE DEBOUNCE E CORREÇÃO DE NaN ---
-    const [localCurrent, setLocalCurrent] = useState(current)
+    // 1. ESCUTA A STORE
+    const animeList = useAppStore((state) => state.animeList)
+    const mangaList = useAppStore((state) => state.mangaList)
 
-    // Sincroniza o valor local caso o valor externo mude
-    useEffect(() => {
-        setLocalCurrent(current)
-    }, [current])
+    const currentItem = props.type === 'anime'
+        ? animeList.find(a => String(a.id) === String(props.id))
+        : mangaList.find(m => String(m.id) === String(props.id))
 
-    // Salva no drive após 1.5s sem novas alterações
-    useEffect(() => {
-        if (localCurrent === current) return
+    // 2. VALOR REAL DA STORE
+    const liveCurrent = Number(
+        (props.type === 'anime'
+            ? (currentItem as any)?.currentEpisode
+            : (currentItem as any)?.currentChapter) ?? props.current ?? 0
+    )
 
-        const handler = setTimeout(() => {
-            onChangeCurrent(localCurrent)
-        }, 1500)
+    const liveStatus = currentItem?.status || props.status
 
-        return () => clearTimeout(handler)
-    }, [localCurrent, onChangeCurrent, current])
+    // 3. ESTADO LOCAL E SINCRONIZAÇÃO (Sem useEffect para evitar erro de Lint)
+    const [localCurrent, setLocalCurrent] = useState<number>(liveCurrent)
+    const [prevLiveCurrent, setPrevLiveCurrent] = useState<number>(liveCurrent)
 
-    // --- LÓGICA DE CORES DINÂMICAS ---
+    // Sincroniza o localCurrent se o liveCurrent (Store) mudar externamente
+    if (liveCurrent !== prevLiveCurrent) {
+        setPrevLiveCurrent(liveCurrent)
+        setLocalCurrent(liveCurrent)
+    }
+
+    // 4. DEFINIÇÕES DE ESTILO E TEMA
     const primaryColor = profile?.theme?.primary || '#3b82f6'
     const bgColor = profile?.theme?.background || '#000000'
+
+    // O isLight que estava faltando:
     const isLight = bgColor.toLowerCase() === '#ffffff' || bgColor.toLowerCase() === 'white'
 
-    // --- LÓGICA NSFW BASEADA NA SUA STORE ---
+    const isNSFW = props.isNSFW || false
     const hideCard = isNSFW && nsfwMode === 'hide'
     const blurCard = isNSFW && nsfwMode === 'blur'
+
+    // 5. DISPLAY E AÇÕES
+    const displayCurrent = editing ? localCurrent : liveCurrent
 
     const stop = (e: MouseEvent) => {
         e.stopPropagation()
         e.preventDefault()
     }
 
-    const handleStatusChange = (e: ChangeEvent<HTMLSelectElement>) => {
-        onChangeStatus(e.target.value as AnimeStatus | ReadingStatus)
+    const handleNextStep = (e: MouseEvent) => {
+        stop(e)
+        props.onChangeCurrent(liveCurrent + 1)
     }
 
-    // Cores de status adaptativas
-    const getStatusStyle = (s: string) => {
-        switch (s) {
+    const handleConfirmEdit = (e: MouseEvent) => {
+        stop(e)
+        props.onChangeCurrent(localCurrent)
+        setEditing(false)
+    }
+
+    const currentStatusStyle = (() => {
+        switch (liveStatus) {
             case 'completed': return { bg: '#10b981', text: '#fff' }
             case 'paused': return { bg: '#f59e0b', text: '#000' }
             case 'dropped': return { bg: '#ef4444', text: '#fff' }
             case 'planned': return { bg: '#71717a', text: '#fff' }
             default: return { bg: primaryColor, text: '#fff' }
         }
-    }
+    })()
 
-    const currentStatusStyle = getStatusStyle(status)
-
-    // 🔴 Early return se o card deve ser ocultado
     if (hideCard) return null
 
     return (
@@ -112,7 +117,6 @@ export default function LibraryAnimeMangaCard(props: Props) {
                 borderColor: isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.08)'
             }}
         >
-            {/* 🔞 Overlay NSFW (Apenas se o modo for 'blur') */}
             {blurCard && (
                 <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xl rounded-[2rem]">
                     <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/50">
@@ -121,34 +125,26 @@ export default function LibraryAnimeMangaCard(props: Props) {
                 </div>
             )}
 
-            {/* CONTAINER DA IMAGEM */}
-            <div className="relative h-56 w-full overflow-hidden rounded-[1.5rem] bg-zinc-950 shadow-inner">
+            <div
+                onClick={() => navigate(`/media/${props.type}/${props.id}`)}
+                className="relative h-56 w-full overflow-hidden rounded-[1.5rem] bg-zinc-950 shadow-inner cursor-pointer"
+            >
+                <img src={props.image} alt="" className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-30 scale-110" />
                 <img
-                    src={image}
-                    alt=""
-                    className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-30 scale-110"
+                    src={props.image}
+                    alt={props.title}
+                    className={`relative z-10 w-full h-full object-contain transition-transform duration-500 group-hover:scale-105 ${blurCard ? 'blur-2xl' : ''}`}
                 />
-
-                <img
-                    src={image}
-                    alt={title}
-                    className={`relative z-10 w-full h-full object-contain transition-transform duration-500 group-hover:scale-105 ${blurCard ? 'blur-2xl' : ''
-                        }`}
-                />
-
                 <div className="absolute inset-0 z-20 bg-gradient-to-t from-black via-transparent to-transparent opacity-80" />
-
-                {/* Badge de Status Dinâmico */}
                 <span
                     className="absolute top-3 right-3 z-30 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-lg"
                     style={{ backgroundColor: currentStatusStyle.bg, color: currentStatusStyle.text }}
                 >
-                    {statusLabel[status]}
+                    {statusLabel[liveStatus as keyof typeof statusLabel] || liveStatus}
                 </span>
-
                 <div className="absolute bottom-4 left-4 right-4 z-30">
                     <h3 className="text-sm font-black text-white leading-tight uppercase tracking-tighter italic line-clamp-2 drop-shadow-md">
-                        {title}
+                        {props.title}
                     </h3>
                 </div>
             </div>
@@ -156,24 +152,15 @@ export default function LibraryAnimeMangaCard(props: Props) {
             <div className="mt-5 px-1 pb-2">
                 <AnimatePresence mode="wait">
                     {!editing ? (
-                        <motion.div
-                            key="view"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            className="space-y-4"
-                        >
+                        <motion.div key="view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
                             <div className="flex justify-between items-end italic">
                                 <div className="flex flex-col">
-                                    <span className="text-[8px] text-zinc-500 font-black uppercase tracking-[0.2em]">
-                                        Progresso
-                                    </span>
+                                    <span className="text-[8px] text-zinc-500 font-black uppercase tracking-[0.2em]">Progresso</span>
                                     <div className="flex items-baseline gap-1">
                                         <span className="text-2xl font-black tracking-tighter" style={{ color: isLight ? '#000' : '#fff' }}>
-                                            {localCurrent}
+                                            {liveCurrent}
                                         </span>
-                                        <span className="text-xs text-zinc-500 font-bold">
-                                            / {total || '∞'}
-                                        </span>
+                                        <span className="text-xs text-zinc-500 font-bold">/ {props.total || '∞'}</span>
                                     </div>
                                 </div>
                                 <div className="flex gap-1.5">
@@ -185,116 +172,69 @@ export default function LibraryAnimeMangaCard(props: Props) {
                                         <Pencil size={16} />
                                     </button>
                                     <button
-                                        onClick={(e) => { 
-                                            stop(e); 
-                                            const nextVal = (Number(localCurrent) || 0) + 1;
-                                            setLocalCurrent(nextVal);
-                                        }}
+                                        onClick={handleNextStep}
                                         className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-lg"
                                         style={{ backgroundColor: primaryColor, color: '#fff' }}
                                     >
-                                        <Plus size={14} strokeWidth={4} />
-                                        Próximo
+                                        <Plus size={14} strokeWidth={4} /> Próximo
                                     </button>
                                 </div>
                             </div>
-
-                            {/* Barra de Progresso Dinâmica */}
                             <div className="h-1.5 w-full rounded-full overflow-hidden" style={{ backgroundColor: isLight ? '#e4e4e7' : '#18181b' }}>
                                 <motion.div
-                                    initial={{ width: 0 }}
-                                    animate={{
-                                        width: `${Math.min(((Number(localCurrent) || 0) / (total || 1)) * 100, 100)}%`,
-                                    }}
+                                    animate={{ width: `${Math.min((liveCurrent / (props.total || 1)) * 100, 100)}%` }}
                                     className="h-full"
-                                    style={{
-                                        backgroundColor: primaryColor,
-                                        boxShadow: `0 0 10px ${primaryColor}60`
-                                    }}
+                                    style={{ backgroundColor: primaryColor, boxShadow: `0 0 10px ${primaryColor}60` }}
                                 />
                             </div>
                         </motion.div>
                     ) : (
-                        <motion.div
-                            key="edit"
-                            initial={{ opacity: 0, y: 5 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="space-y-3"
-                        >
+                        <motion.div key="edit" initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
                             <div className="grid grid-cols-2 gap-2">
                                 <div className="space-y-1">
                                     <label className="text-[8px] font-black text-zinc-500 uppercase ml-1 tracking-widest">Atual</label>
                                     <input
                                         type="number"
                                         value={localCurrent}
-                                        onClick={stop}
                                         onChange={(e) => setLocalCurrent(Number(e.target.value) || 0)}
-                                        className="w-full border rounded-xl px-3 py-2 text-sm font-bold outline-none transition-colors"
-                                        style={{
-                                            backgroundColor: isLight ? '#fff' : '#09090b',
-                                            borderColor: isLight ? '#e4e4e7' : '#27272a',
-                                            color: isLight ? '#000' : '#fff'
-                                        }}
+                                        className="w-full border rounded-xl px-3 py-2 text-sm font-bold outline-none"
+                                        style={{ backgroundColor: isLight ? '#fff' : '#09090b', color: isLight ? '#000' : '#fff', borderColor: isLight ? '#e4e4e7' : '#27272a' }}
                                     />
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-[8px] font-black text-zinc-500 uppercase ml-1 tracking-widest">Total</label>
                                     <input
                                         type="number"
-                                        value={total}
-                                        onClick={stop}
-                                        onChange={(e) => onChangeTotal(Number(e.target.value) || 0)}
-                                        className="w-full border rounded-xl px-3 py-2 text-sm font-bold outline-none transition-colors"
-                                        style={{
-                                            backgroundColor: isLight ? '#fff' : '#09090b',
-                                            borderColor: isLight ? '#e4e4e7' : '#27272a',
-                                            color: isLight ? '#000' : '#fff'
-                                        }}
+                                        value={props.total}
+                                        onChange={(e) => props.onChangeTotal(Number(e.target.value) || 0)}
+                                        className="w-full border rounded-xl px-3 py-2 text-sm font-bold outline-none"
+                                        style={{ backgroundColor: isLight ? '#fff' : '#09090b', color: isLight ? '#000' : '#fff', borderColor: isLight ? '#e4e4e7' : '#27272a' }}
                                     />
                                 </div>
                             </div>
-
                             <div className="space-y-1">
                                 <label className="text-[8px] font-black text-zinc-500 uppercase ml-1 tracking-widest">Status</label>
                                 <select
-                                    value={status}
-                                    onClick={stop}
-                                    onChange={handleStatusChange}
-                                    className="w-full border rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-tighter outline-none appearance-none"
-                                    style={{
-                                        backgroundColor: isLight ? '#fff' : '#09090b',
-                                        borderColor: isLight ? '#e4e4e7' : '#27272a',
-                                        color: isLight ? '#000' : '#fff'
-                                    }}
+                                    value={liveStatus}
+                                    onChange={(e) => props.onChangeStatus(e.target.value as any)}
+                                    className="w-full border rounded-xl px-3 py-2 text-[10px] font-black uppercase outline-none"
+                                    style={{ backgroundColor: isLight ? '#fff' : '#09090b', color: isLight ? '#000' : '#fff', borderColor: isLight ? '#e4e4e7' : '#27272a' }}
                                 >
-                                    {(Object.keys(statusLabel) as Array<keyof typeof statusLabel>).map((key) => (
-                                        <option key={key} value={key} className={isLight ? 'text-black' : 'bg-zinc-900 text-white'}>
-                                            {statusLabel[key]}
-                                        </option>
+                                    {Object.entries(statusLabel).map(([key, label]) => (
+                                        <option key={key} value={key}>{label}</option>
                                     ))}
                                 </select>
                             </div>
-
                             <div className="flex gap-2 pt-1">
-                                <button
-                                    type="button"
-                                    onClick={(e) => { stop(e); onRemove(); }}
-                                    className="p-3 bg-red-500/10 hover:bg-red-500 hover:text-white text-red-500 rounded-xl transition-colors"
-                                >
+                                <button onClick={(e) => { stop(e); props.onRemove(); }} className="p-3 bg-red-500/10 hover:bg-red-500 hover:text-white text-red-500 rounded-xl transition-colors">
                                     <Trash2 size={18} />
                                 </button>
                                 <button
-                                    type="button"
-                                    onClick={(e) => { 
-                                        stop(e); 
-                                        onChangeCurrent(localCurrent); // Salva imediatamente ao confirmar
-                                        setEditing(false); 
-                                    }}
-                                    className="flex-1 py-2 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 shadow-lg"
+                                    onClick={handleConfirmEdit}
+                                    className="flex-1 py-2 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] shadow-lg"
                                     style={{ backgroundColor: isLight ? '#000' : '#fff', color: isLight ? '#fff' : '#000' }}
                                 >
-                                    <Check size={14} strokeWidth={4} />
-                                    Confirmar
+                                    <Check size={14} strokeWidth={4} /> Confirmar
                                 </button>
                             </div>
                         </motion.div>

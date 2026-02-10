@@ -29,44 +29,64 @@ export default function App() {
   useEffect(() => {
     const initApp = async () => {
       try {
-        // 1. CARREGA OS DADOS DO DISCO (HIDRATAÇÃO MANUAL)
-        // Isso garante que Nome, Foto e Sessão sejam lidos antes de mostrar as rotas
+        // 1. CARREGA OS DADOS DO DISCO (REHYDRATE)
         await Promise.all([
-            useSessionStore.persist.rehydrate(),
-            useProfileStore.persist.rehydrate()
+          useSessionStore.persist.rehydrate(),
+          useProfileStore.persist.rehydrate()
         ]);
 
         const session = useSessionStore.getState();
         const profile = useProfileStore.getState();
 
-        // 2. SE ESTIVER AUTENTICADO, REINICIA SERVIÇOS DE NUVEM
-        if (session.hasAccess && profile.profile.accessToken) {
-            initAuthListener();
-            initDriveSync();
-            // Tenta restaurar backup silenciosamente
-            restoreFromDrive().catch(err => console.error("Erro no sync inicial:", err));
+        // 2. SE ESTIVER AUTENTICADO, REINICIA SERVIÇOS NA ORDEM CERTA
+        if (session.isAuthenticated && profile.profile.accessToken) {
+          initAuthListener();
+
+          // A ORDEM AQUI É CRÍTICA:
+          // Primeiro, tentamos puxar o que está na nuvem.
+          // Só depois ativamos o "vigia" (initDriveSync) que salva alterações.
+          try {
+            await restoreFromDrive();
+            console.log("[App]: Restore inicial concluído.");
+          } catch (err) {
+            console.error("Erro no sync inicial:", err);
+          }
+
+          // Agora que os dados já estão no Zustand, ativamos o auto-save
+          initDriveSync();
         }
 
       } catch (e) {
         console.error("Erro na inicialização do App:", e);
       } finally {
-        // 3. LIBERA A RENDERIZAÇÃO
         setIsLoaded(true);
       }
     };
 
     initApp();
 
-    // LISTENER DE CALLBACK DE AUTENTICAÇÃO (ELECTRON)
+    // 3. LISTENER DE CALLBACK DE AUTENTICAÇÃO (ELECTRON)
+    // Corrigido para bater com a assinatura da função handleAuthSuccess
+    // 3. LISTENER DE CALLBACK DE AUTENTICAÇÃO (ELECTRON)
     if ((window as any).electronAPI) {
       const unsubscribe = (window as any).electronAPI.onAuthCallback((url: string) => {
         try {
-          const cleanUrl = url.replace('nesxtarc://auth', 'http://localhost');
-          const urlParams = new URL(cleanUrl);
-          const accessToken = urlParams.searchParams.get('token');
+          console.log("[App]: Recebido Deep Link:", url);
+
+          // 1. Removemos o protocolo e tratamos a string para garantir que o URL() entenda
+          // Substituímos 'auth/' por 'auth' para evitar que a barra final quebre a busca
+          const normalizedUrl = url.replace('nesxtarc://auth/', 'http://localhost/').replace('nesxtarc://auth', 'http://localhost/');
+          const urlObj = new URL(normalizedUrl);
+
+          // 2. Tenta pegar de todas as formas possíveis (token, access_token, no hash ou na query)
+          const params = new URLSearchParams(urlObj.hash.substring(1) || urlObj.search);
+          const accessToken = params.get('token') || params.get('access_token');
 
           if (accessToken) {
-            handleAuthSuccess({ user: {}, credential: { accessToken } });
+            console.log("[App]: Token extraído com sucesso!");
+            handleAuthSuccess({ accessToken });
+          } else {
+            console.warn("[App]: URL recebida, mas nenhum token encontrado.", url);
           }
         } catch (error) {
           console.error("Erro ao processar callback de autenticação:", error);
@@ -79,27 +99,14 @@ export default function App() {
     }
   }, []);
 
-  // Enquanto carrega (milissegundos), mantém tela preta para evitar redirecionamento falso
   if (!isLoaded) {
-    return (
-      <div style={{
-        height: '100vh',
-        width: '100vw',
-        backgroundColor: '#000',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
-      }}>
-        {/* Loader opcional aqui */}
-      </div>
-    );
+    return <div className="h-screen w-screen bg-black" />;
   }
 
   return (
     <HashRouter>
       <div id="main-content">
         <ThemeHandler />
-
         <Layout>
           <Routes>
             <Route path={ROUTES.HOME} element={<Home />} />
@@ -108,7 +115,6 @@ export default function App() {
             <Route path={ROUTES.ACCESS} element={<ChooseAccess />} />
             <Route path="/media/:type/:id" element={<MediaDetailsContainer />} />
 
-            {/* Rotas Protegidas que usam RequireAccess */}
             <Route path={ROUTES.LIBRARY} element={<RequireAccess><Library /></RequireAccess>} />
             <Route path={ROUTES.PROFILE} element={<RequireAccess><Dashboard /></RequireAccess>} />
             <Route path={ROUTES.SETTINGS} element={<RequireAccess><Settings /></RequireAccess>} />
@@ -117,7 +123,6 @@ export default function App() {
           </Routes>
         </Layout>
       </div>
-
       <ToastContainer />
     </HashRouter>
   )

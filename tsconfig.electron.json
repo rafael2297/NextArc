@@ -1,16 +1,13 @@
 {
     "compilerOptions": {
         "target": "ES2022",
-        "module": "ESNext",
+        "module": "CommonJS",
         "outDir": "dist-electron",
         "moduleResolution": "Node",
-        "strict": false,
-        "noUnusedLocals": false,
-        "noUnusedParameters": false,
+        "strict": true,
         "esModuleInterop": true,
-        "skipLibCheck": true
+        "skipLibCheck": true,
+        "lib": ["ES2022", "DOM"]
     },
-    "include": [
-        "src/main.ts"
-    ]
+    "include": ["src/main.ts", "src/preload.ts"]
 }

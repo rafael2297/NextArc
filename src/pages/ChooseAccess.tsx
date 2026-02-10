@@ -2,25 +2,43 @@ import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Ghost, Cloud, ShieldCheck, Sparkles, User } from 'lucide-react'
+import { onAuthStateChanged } from 'firebase/auth'
 
 import { ROUTES } from '../routes/paths'
 import { GoogleLoginButton } from '../components/auth/GoogleLoginButton'
 import { useSessionStore } from '../store/useSessionStore'
+import { auth } from '../services/firebase'
 
 export default function ChooseAccess() {
     const navigate = useNavigate()
     const isAuthenticated = useSessionStore((s) => s.isAuthenticated)
     const enterAuthenticated = useSessionStore((s) => s.enterAuthenticated)
 
+    // Função para acesso offline/visitante
     function handleOffline() {
         enterAuthenticated()
     }
 
+    // LISTENER DO FIREBASE: O segredo para destravar o login do Google
     useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            if (user) {
+                // Se o Firebase confirmou o usuário mas o Zustand ainda não
+                if (!isAuthenticated) {
+                    enterAuthenticated()
+                }
+                // Redireciona imediatamente
+                navigate(ROUTES.PROFILE, { replace: true })
+            }
+        })
+
+        // Se o usuário já estiver marcado como autenticado no Store (Zustand), redireciona
         if (isAuthenticated) {
             navigate(ROUTES.PROFILE, { replace: true })
         }
-    }, [isAuthenticated, navigate])
+
+        return () => unsubscribe()
+    }, [isAuthenticated, navigate, enterAuthenticated])
 
     return (
         <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-hidden">
@@ -65,7 +83,6 @@ export default function ChooseAccess() {
                                     </p>
                                 </div>
 
-                                {/* Container do botão: Força o botão a ter um tamanho bom */}
                                 <div className="w-full max-w-[280px] flex justify-center transform transition-transform duration-300 hover:scale-105">
                                     <GoogleLoginButton />
                                 </div>

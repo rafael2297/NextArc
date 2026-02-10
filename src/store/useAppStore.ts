@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
+import { useToast } from '../components/toast/useToast';
 
 /* =========================
     TIPOS – ANIME & MANGÁ
@@ -12,14 +13,15 @@ export interface AnimeItem {
   id: number
   title: string
   cover: string
-  totalEpisodes: number
-  currentEpisode: number
+  currentEpisode: number;
+  totalEpisodes: number;
   status: AnimeStatus
-  type: 'anime'   // <--- ADICIONADO: Força o tipo para o card não errar
-  format?: string // <--- ADICIONADO: Para mostrar "TV", "Movie", etc.
+  type: 'anime'
+  format?: string
   genres?: { name: string }[]
   addedAt: number
   updatedAt?: number
+  lastAccessed?: number;
 }
 
 export interface MangaItem {
@@ -29,10 +31,11 @@ export interface MangaItem {
   totalChapters: number
   currentChapter: number
   status: ReadingStatus
-  type: 'manga'   // <--- ADICIONADO: Força o tipo
-  format?: string // <--- ADICIONADO: Para mostrar "Manga", "Manhwa", etc.
+  type: 'manga'
+  format?: string
   addedAt: number
   updatedAt?: number
+  lastAccessed?: number;
 }
 
 /* =========================
@@ -75,6 +78,8 @@ export interface AppState {
   addManga: (manga: Omit<MangaItem, 'addedAt' | 'type'> & { addedAt?: number }) => void
   updateManga: (id: number, data: Partial<MangaItem>) => void
   removeManga: (id: number) => void
+
+  updateProgress: (id: number, value: number, type: 'anime' | 'manga') => void
 
   addXp: (amount: number) => void
   addCoins: (amount: number) => void
@@ -141,61 +146,123 @@ export const useAppStore = create<AppState>()(
       addAnime: (anime) => set((state) => ({
         animeList: [...state.animeList, {
           ...anime,
-          type: 'anime', // Garante que o tipo seja salvo corretamente
+          type: 'anime',
           addedAt: anime.addedAt || Date.now(),
           updatedAt: Date.now()
         }],
       })),
 
       updateAnime: (id, data) => set((state) => {
-        const anime = state.animeList.find(a => a.id === id)
-        if (anime && data.currentEpisode && data.currentEpisode > anime.currentEpisode) {
-          const diff = data.currentEpisode - anime.currentEpisode
-          state.addXp(diff * 10)
-          state.addCoins(diff * 5)
+        // Busca o anime usando String() para garantir compatibilidade de ID
+        const animeIndex = state.animeList.findIndex(a => String(a.id) === String(id));
+        if (animeIndex === -1) return state;
+
+        const anime = state.animeList[animeIndex];
+        let extraCoins = 0;
+        let extraXp = 0;
+
+        // Lógica de recompensas
+        if (data.currentEpisode && data.currentEpisode > anime.currentEpisode) {
+          const diff = data.currentEpisode - anime.currentEpisode;
+          extraXp = diff * 10;
+          extraCoins = diff * 5;
         }
+
+        const newList = [...state.animeList];
+        newList[animeIndex] = { ...anime, ...data, updatedAt: Date.now() };
+
         return {
-          animeList: state.animeList.map((a) =>
-            a.id === id ? { ...a, ...data, updatedAt: Date.now() } : a
-          ),
-        }
+          coins: state.coins + extraCoins,
+          xp: state.xp + extraXp,
+          animeList: newList
+        };
       }),
 
       removeAnime: (id) => set((state) => ({
-        animeList: state.animeList.filter((a) => a.id !== id),
+        animeList: state.animeList.filter((a) => String(a.id) !== String(id)),
       })),
 
       addManga: (manga) => set((state) => ({
         mangaList: [...state.mangaList, {
           ...manga,
-          type: 'manga', // Garante que o tipo seja salvo corretamente
+          type: 'manga',
           addedAt: manga.addedAt || Date.now(),
           updatedAt: Date.now()
         }],
       })),
 
       updateManga: (id, data) => set((state) => {
-        const manga = state.mangaList.find(m => m.id === id)
-        if (manga && data.currentChapter && data.currentChapter > manga.currentChapter) {
-          const diff = data.currentChapter - manga.currentChapter
-          state.addXp(diff * 5)
-          state.addCoins(diff * 2)
+        const mangaIndex = state.mangaList.findIndex(m => String(m.id) === String(id));
+        if (mangaIndex === -1) return state;
+
+        const manga = state.mangaList[mangaIndex];
+        let extraCoins = 0;
+        let extraXp = 0;
+
+        if (data.currentChapter && data.currentChapter > (manga.currentChapter || 0)) {
+          const diff = data.currentChapter - (manga.currentChapter || 0);
+          extraXp = diff * 5;
+          extraCoins = diff * 2;
         }
+
+        const newList = [...state.mangaList];
+        newList[mangaIndex] = { ...manga, ...data, updatedAt: Date.now() };
+
         return {
-          mangaList: state.mangaList.map((m) =>
-            m.id === id ? { ...m, ...data, updatedAt: Date.now() } : m
-          ),
-        }
+          coins: state.coins + extraCoins,
+          xp: state.xp + extraXp,
+          mangaList: newList
+        };
       }),
 
       removeManga: (id) => set((state) => ({
-        mangaList: state.mangaList.filter((m) => m.id !== id),
+        mangaList: state.mangaList.filter((m) => String(m.id) !== String(id)),
       })),
 
-      hasAnime: (id) => get().animeList.some((a) => a.id === id),
-      hasManga: (id) => get().mangaList.some((m) => m.id === id),
-      getAnimeById: (id) => get().animeList.find((a) => a.id === id),
-      getMangaById: (id) => get().mangaList.find((m) => m.id === id),
+      updateProgress: (id, value, type) => {
+        const state = get();
+        const isAnime = type === 'anime';
+
+        if (isAnime) {
+          const anime = state.animeList.find((a) => String(a.id) === String(id));
+          if (!anime) return;
+
+          if (value > anime.currentEpisode) {
+            const isCompleted = anime.totalEpisodes > 0 && value >= anime.totalEpisodes;
+
+            // Usamos a função de update que acabamos de ajustar
+            get().updateAnime(id, {
+              currentEpisode: value,
+              status: isCompleted ? 'completed' : anime.status,
+              lastAccessed: Date.now()
+            });
+
+            const { showToast } = useToast.getState();
+            if (isCompleted) showToast(`Parabéns! Finalizou ${anime.title}!`, 'success', 5000);
+          }
+        } else {
+          const manga = state.mangaList.find((m) => String(m.id) === String(id));
+          if (!manga) return;
+
+          if (value > (manga.currentChapter || 0)) {
+            const isCompleted = manga.totalChapters > 0 && value >= manga.totalChapters;
+
+            get().updateManga(id, {
+              currentChapter: value,
+              status: isCompleted ? 'completed' : manga.status,
+              lastAccessed: Date.now()
+            });
+
+            const { showToast } = useToast.getState();
+            if (isCompleted) showToast(`Parabéns! Finalizou ${manga.title}!`, 'success', 5000);
+          }
+        }
+      },
+
+      hasAnime: (id) => get().animeList.some((a) => String(a.id) === String(id)),
+      hasManga: (id) => get().mangaList.some((m) => String(m.id) === String(id)),
+      getAnimeById: (id) => get().animeList.find((a) => String(a.id) === String(id)),
+      getMangaById: (id) => get().mangaList.find((m) => String(m.id) === String(id)),
 
       resetStore: () => set({
         animeList: [],
@@ -204,6 +271,31 @@ export const useAppStore = create<AppState>()(
         xp: 0,
         inventory: [],
       }),
+      // --- NOVA FUNÇÃO DE SINCRONIZAÇÃO SEGURA ---
+      syncWithExternal: (externalData: { animeList?: AnimeItem[], mangaList?: MangaItem[], coins?: number, xp?: number }) => {
+        const state = get();
+
+        set({
+          // Sincroniza Animes: Só substitui se o externo tiver updatedAt maior
+          animeList: externalData.animeList ? externalData.animeList.map(ext => {
+            const local = state.animeList.find(l => String(l.id) === String(ext.id));
+            if (!local) return ext; // Se não tem local, adiciona
+            return (ext.updatedAt || 0) > (local.updatedAt || 0) ? ext : local;
+          }) : state.animeList,
+
+          // Sincroniza Mangás: Mesma lógica
+          mangaList: externalData.mangaList ? externalData.mangaList.map(ext => {
+            const local = state.mangaList.find(l => String(l.id) === String(ext.id));
+            if (!local) return ext;
+            return (ext.updatedAt || 0) > (local.updatedAt || 0) ? ext : local;
+          }) : state.mangaList,
+
+          // Moedas e XP: Fica com o maior valor (geralmente o mais atualizado)
+          coins: Math.max(state.coins, externalData.coins || 0),
+          xp: Math.max(state.xp, externalData.xp || 0),
+        });
+      },
+
     }),
     {
       name: 'otaku-library',

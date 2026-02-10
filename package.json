@@ -2,15 +2,17 @@
   "name": "nesxtarc",
   "version": "1.0.0",
   "type": "module",
-  "main": "dist-electron/main.js",
+  "main": "dist-electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build:web": "vite build",
-    "build:electron": "tsc -p tsconfig.electron.json",
-    "build": "npm run build:web && npm run build:electron && electron-builder",
+    "build:electron": "tsc -p tsconfig.electron.json && move dist-electron\\main.js dist-electron\\main.cjs && move dist-electron\\preload.js dist-electron\\preload.cjs",
+    "build": "npm run build:web && npm run build:electron && npx electron-builder --win",
+    "clean": "if exist dist rmdir /s /q dist && if exist dist-electron rmdir /s /q dist-electron && if exist release rmdir /s /q release",
     "preview": "vite preview",
     "electron:start": "electron .",
-    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://127.0.0.1:5173 && npm run electron:start\""
+    "api": "node api/index.js",
+    "electron:dev": "concurrently \"npm run dev\" \"npm run api\" \"wait-on http://127.0.0.1:5173 && npm run electron:start\""
   },
   "dependencies": {
     "axios": "^1.7.9",
@@ -44,12 +46,27 @@
     "wait-on": "^8.0.1"
   },
   "build": {
-    "appId": "com.rafael.nesxtarc",
+    "appId": "com.nesxtarc.app",
     "productName": "NesxtArc",
     "directories": {
       "output": "release",
       "buildResources": "build"
     },
+    "protocols": {
+      "name": "nesxtarc-protocol",
+      "schemes": [
+        "nesxtarc"
+      ]
+    },
+    "extraResources": [
+      {
+        "from": "api",
+        "to": "api",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
@@ -71,7 +88,9 @@
       "uninstallerIcon": "build/icon.ico",
       "uninstallDisplayName": "NesxtArc",
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "runAfterFinish": true
     }
   }
 }

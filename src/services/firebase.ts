@@ -16,3 +16,8 @@ export const auth = getAuth(app)
 
 export const googleProvider = new GoogleAuthProvider()
 googleProvider.addScope('https://www.googleapis.com/auth/drive.appdata')
+
+
+googleProvider.setCustomParameters({
+    prompt: 'select_account'
+});

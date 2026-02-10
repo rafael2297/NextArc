@@ -1,14 +1,10 @@
-import { useNavigate } from 'react-router-dom'
-import { ROUTES } from '../../routes/paths'
 import { signInWithGoogle } from '../../services/googleAuth'
 
 export function GoogleLoginButton() {
-    const navigate = useNavigate()
-
     async function handleLogin() {
         try {
+            // Isso vai disparar o IPC no Electron ou o Popup na Web
             await signInWithGoogle()
-            navigate(ROUTES.PROFILE)
         } catch (err) {
             console.error('Falha no fluxo de login:', err)
         }
@@ -44,7 +40,6 @@ export function GoogleLoginButton() {
                 active:scale-[0.96]
             "
         >
-            {/* Ícone oficial do Google via URL */}
             <img
                 src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
                 alt="Google"
@@ -53,7 +48,6 @@ export function GoogleLoginButton() {
 
             <span>Entrar com Google</span>
 
-            {/* Brilho suave interno apenas no hover */}
             <div className="absolute inset-0 rounded-2xl border border-white/50 opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
     )

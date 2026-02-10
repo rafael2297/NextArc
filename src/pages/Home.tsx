@@ -6,7 +6,8 @@ import {
   Zap,
   LayoutGrid,
   ChevronRight,
-  Plus
+  Plus,
+  PlayCircle
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
@@ -26,6 +27,15 @@ export default function Home() {
   const textColor = getContrastColor(theme.background)
   const subTextColor = hexToRgba(textColor, 0.6)
 
+  // --- LÓGICA: CONTINUAR ASSISTINDO ---
+  // Filtra itens em andamento e ordena pelo acesso mais recente
+  const lastWatched = [...animeList, ...mangaList]
+    .filter(item => {
+      const progress = item.type === 'anime' ? item.currentEpisode : (item as any).currentChapter;
+      return progress > 0 && item.status !== 'completed';
+    })
+    .sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0))[0];
+
   const watchingCount = animeList.filter((a) => a.status === 'watching').length
   const readingCount = mangaList.filter((m) => m.status === 'reading').length
   const completedCount =
@@ -38,16 +48,13 @@ export default function Home() {
     .slice(0, 4)
 
   return (
-    // Removido o <Layout> daqui (ele já está no App.tsx ou Routes)
     <div className="flex-1">
       {/* SEÇÃO HERO COM BANNER DINÂMICO */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-
-        className="relative h-[400px] md:h-[450px]  overflow-hidden flex items-end pb-16 px-6"
+        className="relative h-[400px] md:h-[450px] overflow-hidden flex items-end pb-16 px-6"
       >
-        {/* Imagem de Fundo (Banner) */}
         {profile.banner ? (
           <img
             src={profile.banner}
@@ -58,7 +65,6 @@ export default function Home() {
           <div className="absolute inset-0" style={{ backgroundColor: theme.navbar }} />
         )}
 
-        {/* Gradiente de Fusão */}
         <div
           className="absolute inset-0 bg-gradient-to-t transition-colors duration-700"
           style={{
@@ -100,7 +106,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* AVATAR RÁPIDO */}
           <motion.div
             whileHover={{ scale: 1.05, rotate: 0 }}
             onClick={() => navigate(ROUTES.PROFILE)}
@@ -172,6 +177,59 @@ export default function Home() {
             </div>
           </motion.button>
         </div>
+
+        {/* --- SEÇÃO CONTINUAR ASSISTINDO (NOVO) --- */}
+        {lastWatched && (
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="relative overflow-hidden border p-1 rounded-[3rem] group"
+            style={{
+              backgroundColor: hexToRgba(theme.navbar, 0.4),
+              borderColor: hexToRgba(theme.primary, 0.2)
+            }}
+          >
+            <div className="flex flex-col md:flex-row items-center gap-6 p-4">
+              <div className="relative h-32 w-full md:w-56 shrink-0 overflow-hidden rounded-[2.2rem]">
+                <img
+                  src={lastWatched.cover}
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                  alt={lastWatched.title}
+                />
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <PlayCircle size={40} style={{ color: theme.primary }} />
+                </div>
+              </div>
+
+              <div className="flex-1 text-center md:text-left space-y-1">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] italic" style={{ color: theme.primary }}>
+                  Continuar de onde parou
+                </p>
+                <h3 className="text-2xl font-black italic uppercase tracking-tighter leading-tight" style={{ color: textColor }}>
+                  {lastWatched.title}
+                </h3>
+                <p className="text-sm font-bold italic" style={{ color: subTextColor }}>
+                  {lastWatched.type === 'anime'
+                    ? `Parou no Episódio ${lastWatched.currentEpisode}`
+                    : `Parou no Capítulo ${(lastWatched as any).currentChapter}`}
+                </p>
+              </div>
+
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => navigate(`/media/${lastWatched.type}/${lastWatched.id}`)}
+                className="px-8 py-4 rounded-full font-black italic uppercase text-xs tracking-widest shadow-xl transition-all"
+                style={{
+                  backgroundColor: theme.primary,
+                  color: getContrastColor(theme.primary)
+                }}
+              >
+                Retomar {lastWatched.type === 'anime' ? 'Ep' : 'Cap'} {(lastWatched.type === 'anime' ? lastWatched.currentEpisode : (lastWatched as any).currentChapter) + 1}
+              </motion.button>
+            </div>
+          </motion.section>
+        )}
 
         {/* ATIVIDADE RECENTE */}
         <section className="space-y-6">

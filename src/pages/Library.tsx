@@ -15,14 +15,9 @@ type FilterStatus = 'all' | 'watching' | 'reading' | 'completed' | 'on_hold' | '
 
 export default function Library() {
   const { profile } = useProfileController()
-  const {
-    animeList,
-    mangaList,
-    updateAnime,
-    updateManga,
-    removeAnime,
-    removeManga,
-  } = useAppStore()
+  const animeList = useAppStore((state) => state.animeList)
+  const mangaList = useAppStore((state) => state.mangaList)
+  const { updateAnime, updateManga, removeAnime, removeManga, updateProgress } = useAppStore()
 
   // --- LÓGICA DE TEMAS ---
   const currentTheme = {
@@ -105,6 +100,7 @@ export default function Library() {
       </div>
     )
   }
+
 
   return (
     <motion.div
@@ -229,7 +225,7 @@ export default function Library() {
                       {viewMode === 'grid' ? (
                         <LibraryAnimeMangaCard id={anime.id} type="anime" title={anime.title} image={anime.cover} status={anime.status} current={anime.currentEpisode} total={anime.totalEpisodes}
                           onChangeStatus={(s) => updateAnime(anime.id, { status: s as AnimeStatus })}
-                          onChangeCurrent={(v) => updateAnime(anime.id, { currentEpisode: v })}
+                          onChangeCurrent={(v) => updateProgress(anime.id, v, 'anime')}
                           onChangeTotal={(v) => updateAnime(anime.id, { totalEpisodes: v })}
                           onRemove={() => removeAnime(anime.id)}
                         />
@@ -265,7 +261,7 @@ export default function Library() {
                       {viewMode === 'grid' ? (
                         <LibraryAnimeMangaCard id={manga.id} type="manga" title={manga.title} image={manga.cover} status={manga.status} current={manga.currentChapter} total={manga.totalChapters}
                           onChangeStatus={(s) => updateManga(manga.id, { status: s as ReadingStatus })}
-                          onChangeCurrent={(v) => updateManga(manga.id, { currentChapter: v })}
+                          onChangeCurrent={(v) => updateProgress(manga.id, v, 'manga')}
                           onChangeTotal={(v) => updateManga(manga.id, { totalChapters: v })}
                           onRemove={() => removeManga(manga.id)}
                         />

@@ -1,70 +1,66 @@
 import { useAppStore } from '../store/useAppStore'
 import { useProfileStore } from '../store/useProfileStore'
+import { useThemeStore } from '../store/useThemeStore'
 import { saveFileToDrive, loadFileFromDrive } from './googleDrive'
 import { useToast } from '../components/toast/useToast'
-import type {
-    AnimeStatus,
-    ReadingStatus,
-} from '../store/useAppStore'
 
 const FILE_NAME = 'otaku-library.json'
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let lastHash = ''
 let applyingRemote = false
+let hasRestoredOnce = false
 
 /* =========================
-    HELPERS
+   HELPERS
 ========================= */
 
 function hash(data: unknown): string {
     return JSON.stringify(data)
 }
 
-function isAnimeStatus(value: string): value is AnimeStatus {
-    return ['watching', 'completed', 'paused', 'dropped', 'planned'].includes(value)
-}
-
-function isReadingStatus(value: string): value is ReadingStatus {
-    return ['reading', 'completed', 'paused', 'dropped', 'planned'].includes(value)
+function cleanToken(token?: string | null): string | null {
+    if (!token) return null
+    return token
+        .replace('nesxtarc://auth/', '')
+        .replace('nesxtarc://auth', '')
 }
 
 /* =========================
-    STORE → BACKUP (GERAR)
+   STORE → BACKUP (SNAPSHOT)
 ========================= */
 
-function buildBackup(): any {
-    const { animeList, mangaList, coins, xp, inventory } = useAppStore.getState()
+function buildBackup() {
+    const app = useAppStore.getState()
+    const theme = useThemeStore.getState()
     const profile = useProfileStore.getState().profile
 
-    const lastLocalUpdate = Math.max(
-        ...animeList.map(a => a.updatedAt || 0),
-        ...mangaList.map(m => m.updatedAt || 0),
+    const lastUpdatedAt = Math.max(
+        ...app.animeList.map(a => a.updatedAt || 0),
+        ...app.mangaList.map(m => m.updatedAt || 0),
         0
     )
 
     return {
-        version: 2,
-        animes: animeList.map(a => ({
-            id: a.id,
-            title: a.title,
-            cover: a.cover,
-            progress: a.currentEpisode,
-            total: a.totalEpisodes,
-            status: a.status,
-            updatedAt: a.updatedAt || a.addedAt,
-        })),
-        mangas: mangaList.map(m => ({
-            id: m.id,
-            title: m.title,
-            cover: m.cover,
-            progress: m.currentChapter,
-            total: m.totalChapters,
-            status: m.status,
-            updatedAt: m.updatedAt || m.addedAt,
-        })),
-        rpg: { coins, xp, inventory },
-        updatedAt: lastLocalUpdate || Date.now(),
+        version: 4,
+        updatedAt: lastUpdatedAt || Date.now(),
+
+        // Estado REAL do app
+        animes: app.animeList,
+        mangas: app.mangaList,
+
+        rpg: {
+            coins: app.coins,
+            xp: app.xp,
+            inventory: app.inventory,
+        },
+
+        theme: {
+            primaryColor: theme.primaryColor,
+            primaryGlow: theme.primaryGlow,
+            backgroundImage: theme.backgroundImage,
+        },
+
         user: {
             name: profile.name,
             avatar: profile.avatar,
@@ -74,121 +70,128 @@ function buildBackup(): any {
 }
 
 /* =========================
-    BACKUP → STORE (APLICAR)
+   BACKUP → STORE
 ========================= */
 
-function applyBackup(backup: any, force = false): boolean {
-    const store = useAppStore.getState()
+function applyBackup(backup: any): boolean {
+    const app = useAppStore.getState()
     const showToast = useToast.getState().showToast
 
-    const localAnimes = store.animeList
-    const localMangas = store.mangaList
+    const isLocalEmpty =
+        app.animeList.length === 0 &&
+        app.mangaList.length === 0
 
     const localUpdatedAt = Math.max(
-        ...localAnimes.map(a => a.updatedAt || 0),
-        ...localMangas.map(m => m.updatedAt || 0),
+        ...app.animeList.map(a => a.updatedAt || 0),
+        ...app.mangaList.map(m => m.updatedAt || 0),
         0
     )
 
-    if (!force) {
-        const isLocalEmpty = localAnimes.length === 0 && localMangas.length === 0;
-
-        if (!isLocalEmpty && backup.updatedAt && backup.updatedAt < localUpdatedAt) {
-            console.warn("⚠️ Sync bloqueado: O arquivo na nuvem é mais antigo que os dados atuais.");
-            return false
-        }
+    // 🔒 Regra de ouro
+    if (!isLocalEmpty && localUpdatedAt > (backup.updatedAt || 0)) {
+        console.log('⏩ Local mais recente que o Drive. Restore ignorado.')
+        return false
     }
 
     applyingRemote = true
-    store.resetStore()
-
-    backup.animes?.forEach((a: any) => {
-        store.addAnime({
-            id: a.id,
-            title: a.title,
-            cover: a.cover,
-            totalEpisodes: a.total,
-            currentEpisode: a.progress,
-            status: isAnimeStatus(a.status) ? a.status : 'planned',
-            addedAt: a.updatedAt,
-        })
-    })
-
-    backup.mangas?.forEach((m: any) => {
-        store.addManga({
-            id: m.id,
-            title: m.title,
-            cover: m.cover,
-            totalChapters: m.total,
-            currentChapter: m.progress,
-            status: isReadingStatus(m.status) ? m.status : 'planned',
-            format: 'manga',
-            addedAt: m.updatedAt,
-        })
-    })
-
-    if (backup.rpg) {
+    try {
         useAppStore.setState({
-            coins: backup.rpg.coins ?? 0,
-            xp: backup.rpg.xp ?? 0,
-            inventory: backup.rpg.inventory ?? []
+            animeList: backup.animes ?? [],
+            mangaList: backup.mangas ?? [],
+            coins: backup.rpg?.coins ?? app.coins,
+            xp: backup.rpg?.xp ?? app.xp,
+            inventory: backup.rpg?.inventory ?? app.inventory,
         })
-    }
 
-    applyingRemote = false
-    showToast('Dados sincronizados com a nuvem!', 'success')
-    return true
+        if (backup.theme) {
+            useThemeStore.setState({
+                primaryColor: backup.theme.primaryColor,
+                primaryGlow: backup.theme.primaryGlow,
+                backgroundImage: backup.theme.backgroundImage,
+            })
+        }
+
+        lastHash = hash(buildBackup())
+        showToast('Dados restaurados do Drive!', 'success')
+        return true
+    } finally {
+        applyingRemote = false
+    }
 }
 
 /* =========================
-    RESTORE
+   RESTORE
 ========================= */
 
-export async function restoreFromDrive(force = false): Promise<void> {
-    const { accessToken } = useProfileStore.getState().profile
-    if (!accessToken) return
+export async function restoreFromDrive(): Promise<void> {
+    if (hasRestoredOnce) return
+
+    const token = cleanToken(
+        useProfileStore.getState().profile.accessToken
+    )
+    if (!token) return
 
     try {
-        const remote = await loadFileFromDrive(FILE_NAME, accessToken)
-        if (!remote) return
+        const remote = await loadFileFromDrive(FILE_NAME, token)
+        if (!remote) {
+            hasRestoredOnce = true
+            return
+        }
 
-        const success = applyBackup(remote, force)
-        if (success) {
-            lastHash = hash(remote)
-        }
-    } catch (error: any) {
-        console.error("Erro no Restore:", error)
-        if (error.message === 'TOKEN_EXPIRED') {
-            throw error;
-        }
+        const applied = applyBackup(remote)
+        if (applied) hasRestoredOnce = true
+    } catch (err) {
+        console.error('Erro no restore do Drive:', err)
     }
 }
 
 /* =========================
-    SYNC (AUTO-SAVE)
+   SYNC AUTOMÁTICO
 ========================= */
 
 export function initDriveSync(): void {
     useAppStore.subscribe(() => {
-        const { accessToken } = useProfileStore.getState().profile
-        const driveEnabled = useProfileStore.getState().driveEnabled
+        const profile = useProfileStore.getState()
+        const token = cleanToken(profile.profile.accessToken)
 
-        if (!accessToken || !driveEnabled || applyingRemote) return
+        if (
+            !token ||
+            !profile.driveEnabled ||
+            applyingRemote ||
+            !hasRestoredOnce
+        ) {
+            return
+        }
 
         const backup = buildBackup()
         const currentHash = hash(backup)
 
+        if (lastHash === '') {
+            lastHash = currentHash
+            return
+        }
+
         if (currentHash === lastHash) return
+
         if (debounceTimer) clearTimeout(debounceTimer)
 
         debounceTimer = setTimeout(async () => {
             try {
-                await saveFileToDrive(FILE_NAME, backup, accessToken)
+                await saveFileToDrive(FILE_NAME, backup, token)
                 lastHash = currentHash
-                console.log("Drive Sync: Backup atualizado.");
-            } catch (error: any) {
-                console.error("Erro no Sync Automático:", error)
+                console.log('☁️ Drive Sync atualizado')
+            } catch (err: any) {
+                console.error('Erro no sync:', err)
+
+                if (err?.status === 401) {
+                    useProfileStore.setState({ driveEnabled: false })
+                    useToast.getState().showToast(
+                        'Sessão expirada. Reconecte o Google Drive.',
+                        'error',
+                        8000
+                    )
+                }
             }
-        }, 5000)
+        }, 4000)
     })
 }

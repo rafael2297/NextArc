@@ -6,6 +6,7 @@ import { useToast } from '../components/toast/useToast'
 import {
     saveFileToDrive,
     loadFileFromDrive,
+    deleteFileFromDrive,
 } from '../services/googleDrive'
 
 import {
@@ -36,24 +37,7 @@ interface BackupData {
 }
 
 const BACKUP_FILE = 'otaku-library.json'
-const AUTO_SAVE_INTERVAL = 1000 * 60 * 5
-
-async function deleteFileFromDrive(fileName: string, token: string) {
-    const searchUrl = `https://www.googleapis.com/drive/v3/files?q=name='${fileName}'&spaces=appDataFolder`;
-    const response = await fetch(searchUrl, {
-        headers: { Authorization: `Bearer ${token}` }
-    });
-    const data = await response.json();
-
-    if (data.files && data.files.length > 0) {
-        for (const file of data.files) {
-            await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}`, {
-                method: 'DELETE',
-                headers: { Authorization: `Bearer ${token}` }
-            });
-        }
-    }
-}
+const AUTO_SAVE_INTERVAL = 1000 * 60 * 5 // Backup de segurança a cada 5 min
 
 function isAnimeStatus(status: any): status is AnimeStatus {
     return ['watching', 'completed', 'paused', 'dropped', 'planned'].includes(status)
@@ -145,26 +129,49 @@ export function useProfileController() {
         theme: { colors: profile.theme, banner: profile.banner }
     }), [animeList, mangaList, coins, xp, inventory, getLatestLocalTimestamp, profile.theme, profile.banner]);
 
-    // --- GOOGLE DRIVE (PROTEGIDO) ---
+    // --- LOGICA DE RECONEXÃO ---
+    const handleTokenExpiration = useCallback(async (actionType: 'backup' | 'restore') => {
+        const message = actionType === 'backup'
+            ? "Sua conexão expirou. Quer reconectar para salvar seu progresso atual no Drive?"
+            : "Sua conexão expirou. Quer reconectar para baixar seus dados do Drive?";
 
+        if (window.confirm(message)) {
+            try {
+                await signInWithGoogle();
+                const currentProfile = useProfileStore.getState().profile;
+                const newToken = currentProfile?.accessToken;
+
+                if (actionType === 'backup' && newToken) {
+                    showToast("Reconectado! Salvando progresso...", "info");
+                    await saveFileToDrive(BACKUP_FILE, buildUserData(), newToken);
+                    showToast("Progresso salvo com sucesso!", "success");
+                } else {
+                    showToast("Reconectado com sucesso!", "success");
+                }
+            } catch (err) {
+                console.error("Erro na reconexão:", err);
+                showToast("Erro ao tentar reconectar.", "error");
+            }
+        }
+    }, [showToast, buildUserData]);
+
+    // --- GOOGLE DRIVE ---
     const backupNow = useCallback(async (manualToken?: string): Promise<void> => {
         const token = manualToken || profile.accessToken
         if (!token || !driveEnabled) return
-        
+
         try {
             setIsSaving(true)
             await saveFileToDrive(BACKUP_FILE, buildUserData(), token)
             if (manualToken) showToast("Backup realizado no Drive!", "success");
         } catch (error: any) {
-            // Se o erro for de autenticação, tenta reconectar
-            if (error.message?.includes('401') || error.status === 401) {
-                showToast("Sessão expirada. Reconectando...", "info");
-                await signInWithGoogle(); 
+            if (error.message === 'TOKEN_EXPIRED') {
+                handleTokenExpiration('backup');
             } else {
-                showToast("Falha no backup automático.", "error");
+                showToast("Falha no backup do Drive.", "error");
             }
         } finally { setIsSaving(false) }
-    }, [driveEnabled, profile.accessToken, buildUserData, showToast]);
+    }, [driveEnabled, profile.accessToken, buildUserData, showToast, handleTokenExpiration]);
 
     const restoreFromDrive = useCallback(async (manualToken?: string): Promise<void> => {
         const token = manualToken || profile.accessToken
@@ -176,7 +183,7 @@ export function useProfileController() {
         try {
             setIsSaving(true);
             const rawData = await loadFileFromDrive(BACKUP_FILE, token);
-            
+
             if (!rawData) {
                 showToast("Nenhum backup encontrado no Drive.", "info");
                 return;
@@ -185,38 +192,34 @@ export function useProfileController() {
             const data = rawData as unknown as BackupData;
             resetStore();
 
-            // Sincronizando listas
             data.animes?.forEach(a => addAnime({ ...a, status: isAnimeStatus(a.status) ? a.status : 'planned' }));
             data.mangas?.forEach(m => addManga({ ...m, status: isReadingStatus(m.status) ? m.status : 'planned' }));
 
-            // Sincronizando RPG
             if (data.rpg) {
-                useAppStore.setState({ 
-                    coins: data.rpg.coins || 0, 
-                    xp: data.rpg.xp || 0, 
-                    inventory: data.rpg.inventory || [] 
+                useAppStore.setState({
+                    coins: data.rpg.coins || 0,
+                    xp: data.rpg.xp || 0,
+                    inventory: data.rpg.inventory || []
                 });
             }
 
-            // Sincronizando Tema
             if (data.theme) {
-                setProfile({ 
-                    ...profile, 
-                    theme: data.theme.colors || profile.theme, 
-                    banner: data.theme.banner || undefined 
+                setProfile({
+                    ...profile,
+                    theme: data.theme.colors || profile.theme,
+                    banner: data.theme.banner || undefined
                 });
             }
 
             showToast("Dados restaurados com sucesso!", "success");
         } catch (error: any) {
-            if (error.message?.includes('401') || error.status === 401) {
-                showToast("Erro de acesso. Reconecte o Google.", "error");
-                await signInWithGoogle(); // Tenta forçar login no erro
+            if (error.message === 'TOKEN_EXPIRED') {
+                handleTokenExpiration('restore');
             } else {
                 showToast("Erro ao restaurar dados.", "error");
             }
         } finally { setIsSaving(false); }
-    }, [profile, resetStore, addAnime, addManga, setProfile, showToast]);
+    }, [profile, resetStore, addAnime, addManga, setProfile, showToast, handleTokenExpiration]);
 
     // --- EXPORT/IMPORT LOCAL ---
     const exportAppDataJson = () => {
@@ -256,17 +259,30 @@ export function useProfileController() {
         applyTheme(profile.theme);
     }, [profile.theme, applyTheme]);
 
+    // SALVAMENTO REATIVO (Instantâneo com Debounce de 3s)
+    useEffect(() => {
+        if (driveEnabled && profile.accessToken) {
+            const timer = setTimeout(() => {
+                backupNow();
+            }, 3000);
+
+            return () => clearTimeout(timer);
+        }
+        // Monitora listas, rpg e conexão
+    }, [animeList, mangaList, coins, xp, inventory, driveEnabled, profile.accessToken, backupNow]);
+
+    // BACKUP DE SEGURANÇA (Intervalo fixo)
     useEffect(() => {
         if (!driveEnabled || !profile.accessToken) return;
-        intervalRef.current = window.setInterval(() => { 
-            backupNow().catch(() => { }) 
+        intervalRef.current = window.setInterval(() => {
+            backupNow().catch(() => { })
         }, AUTO_SAVE_INTERVAL)
         return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
     }, [driveEnabled, profile.accessToken, backupNow])
 
     return {
-        profile, 
-        driveEnabled, 
+        profile,
+        driveEnabled,
         isSaving,
         connectGoogle: signInWithGoogle,
         disconnectGoogle: async () => { await signOutGoogle(); resetProfile(); },
@@ -281,23 +297,23 @@ export function useProfileController() {
         restoreFromDrive: () => restoreFromDrive(profile.accessToken),
         exportProfileJson: exportAppDataJson,
         importProfile,
-        updateFullTheme, 
-        updateSpecificColor, 
+        updateFullTheme,
+        updateSpecificColor,
         updateBannerImage,
         deleteAccount: async () => {
             if (window.confirm("PERIGO: Apagar tudo permanentemente?")) {
                 try {
                     if (profile.accessToken) await deleteFileFromDrive(BACKUP_FILE, profile.accessToken);
                     if (profile.provider === 'google') await deleteGoogleAccount();
-                    resetProfile(); 
-                    resetStore(); 
+                    resetProfile();
+                    resetStore();
                     localStorage.clear();
                     showToast("Tudo foi apagado!", "success");
                     setTimeout(() => window.location.reload(), 1000);
                 } catch { showToast("Erro ao limpar dados.", "error"); }
             }
         },
-        animeList, 
+        animeList,
         mangaList,
     }
 }
