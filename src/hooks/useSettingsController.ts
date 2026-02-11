@@ -55,6 +55,8 @@ export function useProfileController() {
     const resetProfile = useProfileStore((state) => state.resetProfile);
     const toggleDrive = useProfileStore((state) => state.toggleDrive);
 
+    const isToastActive = useRef(false);
+
     const { showToast } = useToast();
     const {
         animeList,
@@ -130,47 +132,60 @@ export function useProfileController() {
     }), [animeList, mangaList, coins, xp, inventory, getLatestLocalTimestamp, profile.theme, profile.banner]);
 
     // --- LOGICA DE RECONEXÃO ---
-    const handleTokenExpiration = useCallback(async (actionType: 'backup' | 'restore') => {
+    const handleTokenExpiration = useCallback((actionType: 'backup' | 'restore') => {
+        if (isToastActive.current) return;
+
         const message = actionType === 'backup'
-            ? "Sua conexão expirou. Quer reconectar para salvar seu progresso atual no Drive?"
-            : "Sua conexão expirou. Quer reconectar para baixar seus dados do Drive?";
+            ? "Sua conexão expirou. Reconecte para salvar seu progresso no Drive."
+            : "Sua conexão expirou. Reconecte para baixar seus dados do Drive.";
 
-        if (window.confirm(message)) {
-            try {
-                await signInWithGoogle();
-                const currentProfile = useProfileStore.getState().profile;
-                const newToken = currentProfile?.accessToken;
+        isToastActive.current = true;
 
-                if (actionType === 'backup' && newToken) {
-                    showToast("Reconectado! Salvando progresso...", "info");
-                    await saveFileToDrive(BACKUP_FILE, buildUserData(), newToken);
-                    showToast("Progresso salvo com sucesso!", "success");
-                } else {
-                    showToast("Reconectado com sucesso!", "success");
-                }
-            } catch (err) {
-                console.error("Erro na reconexão:", err);
-                showToast("Erro ao tentar reconectar.", "error");
+        showToast(
+            message,
+            "error",
+            0, // Duração infinita até interagir
+            "Reconectar Agora",
+            () => {
+                // Ação do Botão: Simples e direta
+                isToastActive.current = false;
+                signInWithGoogle(); // Apenas abre a janela. O resto o App.tsx resolve no callback.
             }
-        }
-    }, [showToast, buildUserData]);
+        );
+    }, [showToast]);
 
     // --- GOOGLE DRIVE ---
     const backupNow = useCallback(async (manualToken?: string): Promise<void> => {
-        const token = manualToken || profile.accessToken
-        if (!token || !driveEnabled) return
+        const token = manualToken || profile.accessToken;
+
+        // Se não tem token nenhum, nem tenta
+        if (!token || !driveEnabled) return;
 
         try {
-            setIsSaving(true)
-            await saveFileToDrive(BACKUP_FILE, buildUserData(), token)
+            setIsSaving(true);
+            await saveFileToDrive(BACKUP_FILE, buildUserData(), token);
+
+            // Sucesso apenas se for clique manual
             if (manualToken) showToast("Backup realizado no Drive!", "success");
         } catch (error: any) {
-            if (error.message === 'TOKEN_EXPIRED') {
+            console.error("Erro detectado:", error);
+
+            // Se o Google disser que não está autorizado (401) ou o token for inválido
+            const isUnauthorized =
+                error.status === 401 ||
+                error.message?.includes('401') ||
+                error.message?.includes('invalid_bits') ||
+                error.message === 'TOKEN_EXPIRED';
+
+            if (isUnauthorized) {
+                // Dispara o Toast com botão que NÃO sai sozinho
                 handleTokenExpiration('backup');
             } else {
-                showToast("Falha no backup do Drive.", "error");
+                showToast("Erro ao acessar o Drive.", "error");
             }
-        } finally { setIsSaving(false) }
+        } finally {
+            setIsSaving(false);
+        }
     }, [driveEnabled, profile.accessToken, buildUserData, showToast, handleTokenExpiration]);
 
     const restoreFromDrive = useCallback(async (manualToken?: string): Promise<void> => {
@@ -280,6 +295,12 @@ export function useProfileController() {
         return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
     }, [driveEnabled, profile.accessToken, backupNow])
 
+    useEffect(() => {
+        return () => {
+            isToastActive.current = false;
+        }
+    }, []);
+
     return {
         profile,
         driveEnabled,
@@ -293,7 +314,15 @@ export function useProfileController() {
                 toggleDrive(!driveEnabled);
             }
         },
-        exportToDrive: () => backupNow(profile.accessToken),
+        exportToDrive: () => {
+            if (!profile.accessToken) {
+                
+                handleTokenExpiration('backup');
+                return;
+            }
+
+            backupNow(profile.accessToken);
+        },
         restoreFromDrive: () => restoreFromDrive(profile.accessToken),
         exportProfileJson: exportAppDataJson,
         importProfile,

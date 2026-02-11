@@ -1,4 +1,4 @@
-import { useState, useEffect, type MouseEvent } from 'react'
+import { useState, type MouseEvent } from 'react'
 import { Pencil, Trash2, Plus, Check } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
@@ -40,7 +40,6 @@ export default function LibraryAnimeMangaCard(props: Props) {
 
     const [editing, setEditing] = useState(false)
 
-    // 1. ESCUTA A STORE
     const animeList = useAppStore((state) => state.animeList)
     const mangaList = useAppStore((state) => state.mangaList)
 
@@ -48,7 +47,9 @@ export default function LibraryAnimeMangaCard(props: Props) {
         ? animeList.find(a => String(a.id) === String(props.id))
         : mangaList.find(m => String(m.id) === String(props.id))
 
-    // 2. VALOR REAL DA STORE
+    // 1. CAPTURA A TEMPORADA ATUAL DA STORE
+    const liveSeason = (currentItem as any)?.currentSeason || 1
+
     const liveCurrent = Number(
         (props.type === 'anime'
             ? (currentItem as any)?.currentEpisode
@@ -57,29 +58,21 @@ export default function LibraryAnimeMangaCard(props: Props) {
 
     const liveStatus = currentItem?.status || props.status
 
-    // 3. ESTADO LOCAL E SINCRONIZAÇÃO (Sem useEffect para evitar erro de Lint)
     const [localCurrent, setLocalCurrent] = useState<number>(liveCurrent)
     const [prevLiveCurrent, setPrevLiveCurrent] = useState<number>(liveCurrent)
 
-    // Sincroniza o localCurrent se o liveCurrent (Store) mudar externamente
     if (liveCurrent !== prevLiveCurrent) {
         setPrevLiveCurrent(liveCurrent)
         setLocalCurrent(liveCurrent)
     }
 
-    // 4. DEFINIÇÕES DE ESTILO E TEMA
     const primaryColor = profile?.theme?.primary || '#3b82f6'
     const bgColor = profile?.theme?.background || '#000000'
-
-    // O isLight que estava faltando:
     const isLight = bgColor.toLowerCase() === '#ffffff' || bgColor.toLowerCase() === 'white'
 
     const isNSFW = props.isNSFW || false
     const hideCard = isNSFW && nsfwMode === 'hide'
     const blurCard = isNSFW && nsfwMode === 'blur'
-
-    // 5. DISPLAY E AÇÕES
-    const displayCurrent = editing ? localCurrent : liveCurrent
 
     const stop = (e: MouseEvent) => {
         e.stopPropagation()
@@ -136,6 +129,14 @@ export default function LibraryAnimeMangaCard(props: Props) {
                     className={`relative z-10 w-full h-full object-contain transition-transform duration-500 group-hover:scale-105 ${blurCard ? 'blur-2xl' : ''}`}
                 />
                 <div className="absolute inset-0 z-20 bg-gradient-to-t from-black via-transparent to-transparent opacity-80" />
+
+                {/* SELO DE TEMPORADA SOBRE A IMAGEM (OPCIONAL) */}
+                {props.type === 'anime' && liveSeason > 1 && (
+                    <span className="absolute top-3 left-3 z-30 px-2 py-1 bg-white/10 backdrop-blur-md border border-white/20 rounded-lg text-[8px] font-black text-white uppercase italic">
+                        Temp {liveSeason}
+                    </span>
+                )}
+
                 <span
                     className="absolute top-3 right-3 z-30 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-lg"
                     style={{ backgroundColor: currentStatusStyle.bg, color: currentStatusStyle.text }}
@@ -158,6 +159,10 @@ export default function LibraryAnimeMangaCard(props: Props) {
                                     <span className="text-[8px] text-zinc-500 font-black uppercase tracking-[0.2em]">Progresso</span>
                                     <div className="flex items-baseline gap-1">
                                         <span className="text-2xl font-black tracking-tighter" style={{ color: isLight ? '#000' : '#fff' }}>
+                                            {/* 2. EXIBIÇÃO COMPOSTA: T2 · 12 */}
+                                            {props.type === 'anime' && liveSeason > 1 && (
+                                                <span className="text-lg opacity-50 mr-1">T{liveSeason} ·</span>
+                                            )}
                                             {liveCurrent}
                                         </span>
                                         <span className="text-xs text-zinc-500 font-bold">/ {props.total || '∞'}</span>
@@ -189,6 +194,7 @@ export default function LibraryAnimeMangaCard(props: Props) {
                             </div>
                         </motion.div>
                     ) : (
+                        // ... Restante do código de edição (mantém igual)
                         <motion.div key="edit" initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
                             <div className="grid grid-cols-2 gap-2">
                                 <div className="space-y-1">

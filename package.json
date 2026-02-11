@@ -5,14 +5,12 @@
   "main": "dist-electron/main.cjs",
   "scripts": {
     "dev": "vite",
-    "build:web": "vite build",
-    "build:electron": "tsc -p tsconfig.electron.json && move dist-electron\\main.js dist-electron\\main.cjs && move dist-electron\\preload.js dist-electron\\preload.cjs",
-    "build": "npm run build:web && npm run build:electron && npx electron-builder --win",
-    "clean": "if exist dist rmdir /s /q dist && if exist dist-electron rmdir /s /q dist-electron && if exist release rmdir /s /q release",
-    "preview": "vite preview",
-    "electron:start": "electron .",
     "api": "node api/index.js",
-    "electron:dev": "concurrently \"npm run dev\" \"npm run api\" \"wait-on http://127.0.0.1:5173 && npm run electron:start\""
+    "build:web": "vite build",
+    "build:api": "ncc build api/source.js -o api_dist && move api_dist\\index.js api\\index.js",
+    "build:electron": "tsc -p tsconfig.electron.json && node -e \"const fs=require('fs'); if(fs.existsSync('dist-electron/main.js')){fs.renameSync('dist-electron/main.js', 'dist-electron/main.cjs')}; if(fs.existsSync('dist-electron/preload.js')){fs.renameSync('dist-electron/preload.js', 'dist-electron/preload.cjs')}\"",
+    "build": "npm run clean && npm run build:api && npm run build:web && npm run build:electron && npx electron-builder --win",
+    "clean": "if exist dist rmdir /s /q dist && if exist dist-electron rmdir /s /q dist-electron && if exist release rmdir /s /q release && if exist api_dist rmdir /s /q api_dist"
   },
   "dependencies": {
     "axios": "^1.7.9",
@@ -29,6 +27,7 @@
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
+    "@vercel/ncc": "^0.38.4",
     "@vitejs/plugin-react": "^5.1.1",
     "autoprefixer": "^10.4.23",
     "concurrently": "^9.1.0",

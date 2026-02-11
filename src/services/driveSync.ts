@@ -27,7 +27,7 @@ function cleanToken(token?: string | null): string | null {
 }
 
 /* =========================
-   STORE → BACKUP (SNAPSHOT)
+    STORE → BACKUP (SNAPSHOT)
 ========================= */
 
 function buildBackup() {
@@ -42,10 +42,9 @@ function buildBackup() {
     )
 
     return {
-        version: 4,
+        version: 5,
         updatedAt: lastUpdatedAt || Date.now(),
 
-        // Estado REAL do app
         animes: app.animeList,
         mangas: app.mangaList,
 
@@ -54,13 +53,12 @@ function buildBackup() {
             xp: app.xp,
             inventory: app.inventory,
         },
-
+        // ... restante do objeto (theme, user)
         theme: {
             primaryColor: theme.primaryColor,
             primaryGlow: theme.primaryGlow,
             backgroundImage: theme.backgroundImage,
         },
-
         user: {
             name: profile.name,
             avatar: profile.avatar,
@@ -126,24 +124,40 @@ function applyBackup(backup: any): boolean {
 export async function restoreFromDrive(): Promise<void> {
     if (hasRestoredOnce) return
 
-    const token = cleanToken(
-        useProfileStore.getState().profile.accessToken
-    )
-    if (!token) return
+    const profileStore = useProfileStore.getState()
+    const token = cleanToken(profileStore.profile.accessToken)
+
+    if (!token) {
+        hasRestoredOnce = true
+        return
+    }
 
     try {
         const remote = await loadFileFromDrive(FILE_NAME, token)
+
         if (!remote) {
             hasRestoredOnce = true
             return
         }
 
-        const applied = applyBackup(remote)
-        if (applied) hasRestoredOnce = true
-    } catch (err) {
-        console.error('Erro no restore do Drive:', err)
+        applyBackup(remote)
+        hasRestoredOnce = true
+
+    } catch (err: any) {
+        console.warn('[Drive] Restore falhou, seguindo com dados locais')
+        hasRestoredOnce = true
+
+        // 👉 token expirado
+        if (err?.message === 'TOKEN_EXPIRED') {
+            console.warn('[Drive] Token expirado, desativando Drive')
+
+            profileStore.updateProfile({ accessToken: undefined })
+            profileStore.toggleDrive(false)
+        }
     }
 }
+
+
 
 /* =========================
    SYNC AUTOMÁTICO

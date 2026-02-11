@@ -42,13 +42,17 @@ function startBackend() {
 
     const apiPath = path.join(apiDir, 'index.js');
 
-    apiProcess = spawn('node', [apiPath], {
-        shell: true,
+    apiProcess = spawn(process.execPath, [apiPath], {
+        shell: false,
         cwd: apiDir,
-        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
+        env: {
+            ...process.env,
+            ELECTRON_RUN_AS_NODE: '1'
+        }
     });
 
-    apiProcess.on('error', (err) => console.error('[Backend Error]:', err));
+    apiProcess.stdout?.on('data', (data) => console.log(`[API]: ${data}`));
+    apiProcess.stderr?.on('data', (data) => console.error(`[API Error]: ${data}`));
 }
 
 /**

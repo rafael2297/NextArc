@@ -76,14 +76,21 @@ export default function Settings() {
 
     // Função aprimorada para Backup Manual
     const handleManualBackup = async () => {
+        // Se estiver salvando, não faz nada
+        if (isSaving) return;
+
+        // Se o token estiver inválido, abre o Google direto
+        if (isTokenInvalid) {
+            console.log("Sessão expirada, abrindo Google Auth direto...");
+            await connectGoogle(); // Chama a função que abre o login (signInWithGoogle)
+            return;
+        }
+
+        // Se o token estiver OK, faz o backup normal
         try {
             await exportToDrive();
-        } catch (error: any) {
-            // Se o erro for de autenticação, tentamos reconectar
-            if (error.message?.includes('401') || error.message?.includes('auth')) {
-                showToast("Sessão expirada. Reconectando...", "info");
-                connectGoogle();
-            }
+        } catch (err) {
+            console.error("Erro no backup manual:", err);
         }
     };
 
@@ -402,7 +409,7 @@ export default function Settings() {
 
                                 <div className="grid grid-cols-2 gap-2">
                                     <button
-                                        onClick={handleManualBackup}
+                                        onClick={handleManualBackup} // <-- Ele vai disparar a lógica acima
                                         disabled={isSaving}
                                         className="py-4 rounded-2xl flex items-center justify-center gap-2 border border-dashed transition-all active:scale-95 disabled:grayscale"
                                         style={{

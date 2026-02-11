@@ -1,18 +1,17 @@
-import { useEffect, useState } from 'react'
-import { Play, Tv, AlertCircle, Loader2 } from 'lucide-react'
+import { useEffect, useState, useMemo } from 'react'
+import { Tv, AlertCircle, Loader2, ChevronDown } from 'lucide-react' // Adicionado ChevronDown
 import { useProfileStore } from '../../../store/useProfileStore'
 import { hexToRgba, getContrastColor } from '../../../utils/colors'
 import VideoPlayer from '../../../components/shared/VideoPlayer'
-import { useAppStore } from '../../../store/useAppStore';
-
+import { useAppStore } from '../../../store/useAppStore'
+import { useToast } from '../../../components/toast/useToast';
 
 interface Episode {
-    animeId: number;
-    mediaType: string;
     title: string
     link: string
     img: string
     provider: string
+    season?: number
 }
 
 interface Props {
@@ -21,208 +20,216 @@ interface Props {
     animeTitle: string
 }
 
-export default function MediaEpisodesTab({ animeId, mediaType, animeTitle }: Props) {
+function normalizeTitle(title: string) {
+    return title
+        .replace(/\(.*?\)/g, '')
+        .replace(/-/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+}
+
+export default function MediaEpisodesTab({
+    animeId,
+    mediaType,
+    animeTitle
+}: Props) {
     const [episodes, setEpisodes] = useState<Episode[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(false)
-    const updateProgress = useAppStore((state) => state.updateProgress);
-    // Estados para o Player
+
+    // ESTADO PARA TEMPORADAS ABERTAS (Inicia com a Temporada 1 aberta)
+    const [openSeasons, setOpenSeasons] = useState<Record<number, boolean>>({ 1: true })
+
     const [currentIndex, setCurrentIndex] = useState<number | null>(null)
     const [selectedVideoUrl, setSelectedVideoUrl] = useState<string | null>(null)
     const [isExtracting, setIsExtracting] = useState(false)
 
-    const theme = useProfileStore((state) => state.profile.theme)
+    const updateProgress = useAppStore((s) => s.updateProgress)
+    const theme = useProfileStore((s) => s.profile.theme)
     const textColor = getContrastColor(theme.background)
+
+    const { showToast } = useToast();
+
 
     useEffect(() => {
         const fetchEpisodes = async () => {
             setLoading(true)
             setError(false)
-            try {
-                // Passamos o título completo para a API lidar com a filtragem de temporada
-                const response = await fetch(`http://localhost:3000/api/search?q=${encodeURIComponent(animeTitle)}`)
-                const data = await response.json()
+            const attempts = [animeTitle, normalizeTitle(animeTitle)]
 
-                if (data && Array.isArray(data)) {
-                    // Ordenação numérica inteligente (para não misturar ep 1 com ep 10)
-                    const sortedData = data.sort((a: Episode, b: Episode) => {
-                        const numA = parseInt(a.title.replace(/\D/g, '')) || 0;
-                        const numB = parseInt(b.title.replace(/\D/g, '')) || 0;
-                        return numA - numB;
-                    });
-                    setEpisodes(sortedData);
+            try {
+                for (const q of attempts) {
+                    const res = await fetch(`http://127.0.0.1:3000/api/search?q=${encodeURIComponent(q)}`)
+
+                    if (!res.ok) continue
+                    const data = await res.json()
+
+                    if (!Array.isArray(data) || data.length === 0) continue
+
+                    const valid = data.filter((ep) => ep?.link && ep?.provider)
+                    if (valid.length === 0) continue
+
+                    valid.sort((a, b) => {
+                        if (a.season !== b.season) return (a.season || 1) - (b.season || 1)
+                        const na = parseInt(a.title.replace(/\D/g, '')) || 0
+                        const nb = parseInt(b.title.replace(/\D/g, '')) || 0
+                        return na - nb
+                    })
+
+                    setEpisodes(valid)
+                    setLoading(false)
+                    return
                 }
+                setError(true)
             } catch (err) {
-                console.error("Erro ao buscar episódios:", err)
+                console.error('[EpisodesTab] erro:', err)
                 setError(true)
             } finally {
                 setLoading(false)
             }
         }
-
         fetchEpisodes()
     }, [animeTitle])
 
-    // Função para extrair o vídeo baseado no índice da lista
     const playEpisode = async (index: number) => {
         const ep = episodes[index];
         if (!ep) return;
 
         setIsExtracting(true);
-
         try {
-            const apiUrl = `http://localhost:3000/api/video?url=${encodeURIComponent(ep.link)}&provider=${ep.provider}`;
-            const response = await fetch(apiUrl);
-            const data = await response.json();
+            // Adicionamos t=${Date.now()} para evitar cache do navegador
+            const res = await fetch(
+                `http://127.0.0.1:3000/api/video?url=${encodeURIComponent(ep.link)}&provider=${ep.provider}&t=${Date.now()}`
+            );
 
-            if (data.url) {
+            const data = await res.json();
+            console.log("Resposta do Servidor:", data);
+
+            // Verifica se data.url existe de fato
+            if (data && data.url) {
                 setSelectedVideoUrl(data.url);
                 setCurrentIndex(index);
 
-                // --- ATUALIZAÇÃO DE PROGRESSO ---
-                const epMatch = ep.title.match(/\d+/);
-                const episodeNum = epMatch ? parseInt(epMatch[0]) : null;
-
-                if (episodeNum !== null) {
-                    const type = mediaType === 'manga' ? 'manga' : 'anime';
-
-                    // DEBUG: Verifique se o ID que chega aqui é o mesmo que aparece no console da Store
-                    console.log("Tentando atualizar progresso do ID:", animeId, "para o ep:", episodeNum);
-
-                    updateProgress(Number(animeId), episodeNum, type);
+                const epNum = ep.title.match(/\d+/)?.[0];
+                if (epNum) {
+                    updateProgress(animeId, Number(epNum), mediaType === 'manga' ? 'manga' : 'anime', ep.season || 1);
                 }
             } else {
-                alert("O provedor não liberou o player.");
+                showToast('O provedor não liberou o player. O link pode ter expirado.', 'warning');
             }
-        } catch (err) {
-            console.error("Erro na extração:", err);
+        } catch (e) {
+            console.error('Erro:', e);
+            showToast('Erro ao conectar com o servidor de vídeo.', 'error');
         } finally {
             setIsExtracting(false);
         }
     };
 
-    // Funções de navegação para o VideoPlayer
-    const handleNext = () => {
-        if (currentIndex !== null && currentIndex < episodes.length - 1) {
-            playEpisode(currentIndex + 1)
-        }
+    const episodesBySeason = useMemo(() => {
+        const acc: Record<number, Episode[]> = {};
+        episodes.forEach((ep) => {
+            const s = Number(ep.season) || 1;
+            if (!acc[s]) acc[s] = [];
+            acc[s].push(ep);
+        });
+        return acc;
+    }, [episodes]);
+
+    // Função para alternar colapso
+    const toggleSeason = (season: number) => {
+        setOpenSeasons(prev => ({
+            ...prev,
+            [season]: !prev[season]
+        }))
     }
 
-    const handlePrev = () => {
-        if (currentIndex !== null && currentIndex > 0) {
-            playEpisode(currentIndex - 1)
-        }
-    }
+    if (loading) return (
+        <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <div className="w-10 h-10 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: theme.primary }} />
+            <span className="text-[10px] font-black uppercase tracking-[0.3em] opacity-50" style={{ color: textColor }}>Sincronizando Provedores...</span>
+        </div>
+    )
 
-    if (loading) {
-        return (
-            <div className="flex flex-col items-center justify-center py-20 gap-4 animate-in fade-in duration-500">
-                <div
-                    className="w-10 h-10 rounded-full border-2 border-t-transparent animate-spin"
-                    style={{ borderColor: theme.primary, borderTopColor: 'transparent' }}
-                />
-                <span className="text-[10px] font-black uppercase tracking-[0.3em] opacity-50" style={{ color: textColor }}>
-                    Sincronizando Provedores...
-                </span>
-            </div>
-        )
-    }
-
-    if (error || episodes.length === 0) {
-        return (
-            <div
-                className="flex flex-col items-center justify-center py-16 px-6 rounded-[2.5rem] border-2 border-dashed"
-                style={{ borderColor: hexToRgba(textColor, 0.05), color: hexToRgba(textColor, 0.4) }}
-            >
-                <AlertCircle size={32} className="mb-4 opacity-20" />
-                <p className="text-xs font-black uppercase tracking-widest text-center">
-                    {error ? 'Erro na API Local' : `Nenhum episódio encontrado para esta temporada`}
-                </p>
-                <button
-                    onClick={() => window.location.reload()}
-                    className="mt-4 text-[10px] font-bold underline opacity-60 hover:opacity-100"
-                >
-                    Tentar Novamente
-                </button>
-            </div>
-        )
-    }
+    if (error || episodes.length === 0) return (
+        <div className="flex flex-col items-center justify-center py-16 px-6 rounded-[2.5rem] border-2 border-dashed" style={{ borderColor: hexToRgba(textColor, 0.05), color: hexToRgba(textColor, 0.4) }}>
+            <AlertCircle size={32} className="mb-4 opacity-20" />
+            <p className="text-xs font-black uppercase tracking-widest text-center">Nenhum episódio encontrado</p>
+        </div>
+    )
 
     return (
-        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="flex items-center justify-between px-2">
-                <div className="flex items-center gap-2 opacity-50" style={{ color: textColor }}>
-                    <Tv size={14} />
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em]">Temporada Disponível</span>
-                </div>
-                <span
-                    className="text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full border"
-                    style={{
-                        backgroundColor: hexToRgba(theme.primary, 0.1),
-                        borderColor: hexToRgba(theme.primary, 0.2),
-                        color: theme.primary
-                    }}
-                >
-                    {episodes.length} Episódios
-                </span>
-            </div>
+        <div className="space-y-4"> {/* Diminuí o espaçamento geral */}
+            {Object.keys(episodesBySeason)
+                .map(Number)
+                .sort((a, b) => a - b)
+                .map((season) => {
+                    const isOpen = !!openSeasons[season];
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {episodes.map((ep, idx) => (
-                    <button
-                        key={idx}
-                        onClick={() => playEpisode(idx)}
-                        disabled={isExtracting}
-                        className="group relative flex items-center gap-4 p-3 rounded-[1.8rem] border transition-all hover:scale-[1.02] active:scale-95 text-left disabled:opacity-50"
-                        style={{
-                            backgroundColor: hexToRgba(theme.navbar, 0.4),
-                            borderColor: currentIndex === idx ? theme.primary : hexToRgba(textColor, 0.05)
-                        }}
-                    >
-                        <div className="relative w-24 h-16 flex-shrink-0 overflow-hidden rounded-2xl bg-zinc-800 shadow-lg">
-                            {/* Overlay de Play */}
-                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                                <Play size={16} className="fill-white text-white" />
-                            </div>
-
-                            {/* Thumbnail ou Placeholder */}
-                            <img
-                                src={ep.img}
-                                alt=""
-                                className="..."
-                                onError={(e) => {
-                                    e.currentTarget.onerror = null;
-                                    e.currentTarget.src = "https://via.placeholder.com/150x100?text=Sem+Thumb";
+                    return (
+                        <div key={season} className="overflow-hidden">
+                            {/* HEADER COLAPSÁVEL */}
+                            <button
+                                onClick={() => toggleSeason(season)}
+                                className="w-full flex items-center justify-between p-4 rounded-2xl transition-all active:scale-[0.98]"
+                                style={{
+                                    backgroundColor: hexToRgba(textColor, 0.03),
+                                    color: textColor
                                 }}
-                            />
-                        </div>
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: hexToRgba(theme.primary, 0.1) }}>
+                                        <Tv size={14} style={{ color: theme.primary }} />
+                                    </div>
+                                    <span className="text-xs font-black uppercase tracking-widest">
+                                        Temporada {season}
+                                    </span>
+                                    <span className="text-[10px] opacity-40 font-bold">
+                                        ({episodesBySeason[season].length} EPISÓDIOS)
+                                    </span>
+                                </div>
+                                <ChevronDown
+                                    size={18}
+                                    className={`transition-transform duration-300 opacity-30 ${isOpen ? 'rotate-180' : ''}`}
+                                />
+                            </button>
 
-                        <div className="flex flex-col gap-1 pr-4 overflow-hidden">
-                            <span className="text-[8px] font-black uppercase tracking-tighter opacity-40" style={{ color: textColor }}>
-                                {ep.provider}
-                            </span>
-                            <h4 className="text-sm font-black italic uppercase leading-tight truncate" style={{ color: textColor }}>
-                                {ep.title}
-                            </h4>
+                            {/* GRID DE EPISÓDIOS (ANIMADO POR CSS) */}
+                            <div className={`grid transition-all duration-300 ease-in-out ${isOpen ? 'grid-rows-[1fr] opacity-100 mt-6' : 'grid-rows-[0fr] opacity-0'}`}>
+                                <div className="overflow-hidden">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {episodesBySeason[season].map((ep) => {
+                                            const globalIndex = episodes.indexOf(ep)
+                                            return (
+                                                <button
+                                                    key={`${ep.link}-${globalIndex}`}
+                                                    onClick={() => playEpisode(globalIndex)}
+                                                    className="flex items-center gap-4 p-3 rounded-xl border transition-all hover:scale-[1.02] active:scale-95"
+                                                    style={{ backgroundColor: hexToRgba(theme.background, 0.5), borderColor: hexToRgba(textColor, 0.1) }}
+                                                >
+                                                    <img src={ep.img} alt={ep.title} className="w-24 h-16 rounded-lg object-cover bg-neutral-900" />
+                                                    <div className="text-left">
+                                                        <p className="text-[9px] font-bold uppercase opacity-40 tracking-tighter">{ep.provider}</p>
+                                                        <p className="font-bold text-sm line-clamp-1" style={{ color: textColor }}>{ep.title}</p>
+                                                    </div>
+                                                </button>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                    </button>
-                ))}
-            </div>
+                    )
+                })}
 
-            {/* Overlay de Loading da Extração */}
             {isExtracting && (
-                <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-xl flex flex-col items-center justify-center">
-                    <div className="relative">
-                        <Loader2 size={48} className="animate-spin" style={{ color: theme.primary }} />
-                        <Play size={16} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" style={{ color: theme.primary }} />
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] backdrop-blur-sm">
+                    <div className="flex flex-col items-center gap-4">
+                        <Loader2 className="animate-spin text-white" size={40} />
+                        <span className="text-white text-[10px] font-black uppercase tracking-widest">Extraindo Link...</span>
                     </div>
-                    <span className="mt-6 text-[11px] font-black uppercase tracking-[0.5em] text-white animate-pulse">
-                        Extraindo Media Stream...
-                    </span>
                 </div>
             )}
 
-            {/* Video Player Render */}
             {selectedVideoUrl && currentIndex !== null && (
                 <VideoPlayer
                     url={selectedVideoUrl}
@@ -231,8 +238,6 @@ export default function MediaEpisodesTab({ animeId, mediaType, animeTitle }: Pro
                         setSelectedVideoUrl(null)
                         setCurrentIndex(null)
                     }}
-                    onNext={currentIndex < episodes.length - 1 ? handleNext : undefined}
-                    onPrev={currentIndex > 0 ? handlePrev : undefined}
                 />
             )}
         </div>

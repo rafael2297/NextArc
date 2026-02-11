@@ -7,6 +7,8 @@ export type Toast = {
     message: string
     type: ToastType
     duration?: number
+    actionLabel?: string;
+    onAction?: () => void;
 }
 
 type ToastStore = {
@@ -14,7 +16,9 @@ type ToastStore = {
     showToast: (
         message: string,
         type?: ToastType,
-        duration?: number
+        duration?: number,
+        actionLabel?: string,   
+        onAction?: () => void
     ) => void
     removeToast: (id: string) => void
 }
@@ -22,7 +26,7 @@ type ToastStore = {
 export const useToast = create<ToastStore>((set) => ({
     toasts: [],
 
-    showToast: (message, type = 'info', duration = 3000) =>
+    showToast: (message, type = 'info', duration = 3000, actionLabel?: string, onAction?: () => void) =>
         set((state) => ({
             toasts: [
                 ...state.toasts,
@@ -31,6 +35,8 @@ export const useToast = create<ToastStore>((set) => ({
                     message,
                     type,
                     duration,
+                    actionLabel,
+                    onAction,
                 },
             ],
         })),

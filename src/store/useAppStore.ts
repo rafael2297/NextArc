@@ -14,6 +14,7 @@ export interface AnimeItem {
   title: string
   cover: string
   currentEpisode: number;
+  currentSeason?: number; // ✅ ADICIONADO: Define que o anime pode ter temporada
   totalEpisodes: number;
   status: AnimeStatus
   type: 'anime'
@@ -24,6 +25,7 @@ export interface AnimeItem {
   lastAccessed?: number;
 }
 
+// ... Resto das interfaces (MangaItem, CardItem, etc) seguem iguais ...
 export interface MangaItem {
   id: number
   title: string
@@ -37,10 +39,6 @@ export interface MangaItem {
   updatedAt?: number
   lastAccessed?: number;
 }
-
-/* =========================
-    TIPOS – COLEÇÃO (TCG)
-========================= */
 
 export type Rarity = 'common' | 'rare' | 'epic' | 'legendary'
 
@@ -79,7 +77,7 @@ export interface AppState {
   updateManga: (id: number, data: Partial<MangaItem>) => void
   removeManga: (id: number) => void
 
-  updateProgress: (id: number, value: number, type: 'anime' | 'manga') => void
+  updateProgress: (id: number, episode: number, type: 'anime' | 'manga', season?: number) => void
 
   addXp: (amount: number) => void
   addCoins: (amount: number) => void
@@ -91,6 +89,7 @@ export interface AppState {
   getAnimeById: (id: number) => AnimeItem | undefined
   getMangaById: (id: number) => MangaItem | undefined
   resetStore: () => void
+  syncWithExternal: (externalData: { animeList?: AnimeItem[], mangaList?: MangaItem[], coins?: number, xp?: number }) => void
 }
 
 /* =========================
@@ -106,6 +105,7 @@ export const useAppStore = create<AppState>()(
       xp: 0,
       inventory: [],
 
+      // ... addXp, addCoins, spendCoins, addCardToInventory, addAnime seguem iguais ...
       addXp: (amount) => set((state) => ({ xp: state.xp + amount })),
       addCoins: (amount) => set((state) => ({ coins: state.coins + amount })),
 
@@ -153,7 +153,6 @@ export const useAppStore = create<AppState>()(
       })),
 
       updateAnime: (id, data) => set((state) => {
-        // Busca o anime usando String() para garantir compatibilidade de ID
         const animeIndex = state.animeList.findIndex(a => String(a.id) === String(id));
         if (animeIndex === -1) return state;
 
@@ -161,7 +160,6 @@ export const useAppStore = create<AppState>()(
         let extraCoins = 0;
         let extraXp = 0;
 
-        // Lógica de recompensas
         if (data.currentEpisode && data.currentEpisode > anime.currentEpisode) {
           const diff = data.currentEpisode - anime.currentEpisode;
           extraXp = diff * 10;
@@ -219,7 +217,10 @@ export const useAppStore = create<AppState>()(
         mangaList: state.mangaList.filter((m) => String(m.id) !== String(id)),
       })),
 
-      updateProgress: (id, value, type) => {
+      /* =========================
+          LOGICA DE PROGRESSO CORRIGIDA
+      ========================= */
+      updateProgress: (id, value, type, season) => {
         const state = get();
         const isAnime = type === 'anime';
 
@@ -227,12 +228,20 @@ export const useAppStore = create<AppState>()(
           const anime = state.animeList.find((a) => String(a.id) === String(id));
           if (!anime) return;
 
-          if (value > anime.currentEpisode) {
+          // Resolvemos o erro "'season' is possibly undefined" usando um fallback (|| 1)
+          const targetSeason = season || 1;
+          const currentSeason = anime.currentSeason || 1;
+
+          // Comparação segura: temporada maior OU (mesma temporada e episódio maior)
+          const isNewer = (targetSeason > currentSeason) ||
+            (targetSeason === currentSeason && value > anime.currentEpisode);
+
+          if (isNewer) {
             const isCompleted = anime.totalEpisodes > 0 && value >= anime.totalEpisodes;
 
-            // Usamos a função de update que acabamos de ajustar
             get().updateAnime(id, {
               currentEpisode: value,
+              currentSeason: targetSeason, // ✅ Agora o TS sabe que 'currentSeason' existe na interface
               status: isCompleted ? 'completed' : anime.status,
               lastAccessed: Date.now()
             });
@@ -271,31 +280,26 @@ export const useAppStore = create<AppState>()(
         xp: 0,
         inventory: [],
       }),
-      // --- NOVA FUNÇÃO DE SINCRONIZAÇÃO SEGURA ---
-      syncWithExternal: (externalData: { animeList?: AnimeItem[], mangaList?: MangaItem[], coins?: number, xp?: number }) => {
-        const state = get();
 
+      syncWithExternal: (externalData) => {
+        const state = get();
         set({
-          // Sincroniza Animes: Só substitui se o externo tiver updatedAt maior
           animeList: externalData.animeList ? externalData.animeList.map(ext => {
             const local = state.animeList.find(l => String(l.id) === String(ext.id));
-            if (!local) return ext; // Se não tem local, adiciona
+            if (!local) return ext;
             return (ext.updatedAt || 0) > (local.updatedAt || 0) ? ext : local;
           }) : state.animeList,
 
-          // Sincroniza Mangás: Mesma lógica
           mangaList: externalData.mangaList ? externalData.mangaList.map(ext => {
             const local = state.mangaList.find(l => String(l.id) === String(ext.id));
             if (!local) return ext;
             return (ext.updatedAt || 0) > (local.updatedAt || 0) ? ext : local;
           }) : state.mangaList,
 
-          // Moedas e XP: Fica com o maior valor (geralmente o mais atualizado)
           coins: Math.max(state.coins, externalData.coins || 0),
           xp: Math.max(state.xp, externalData.xp || 0),
         });
       },
-
     }),
     {
       name: 'otaku-library',

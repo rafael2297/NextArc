@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Check, Star, Trophy, Tv, Activity } from 'lucide-react'
+import { Plus, Check, Star, Trophy, Tv, Activity, Youtube } from 'lucide-react'
 
 import Layout from '../../components/layout/Layout'
 import { useProfileStore } from '../../store/useProfileStore'
@@ -74,21 +74,26 @@ export default function MediaDetailsLayout({
     const { theme, banner: userBanner } = profile
     const textColor = getContrastColor(theme.background)
 
-    // Configuração da URL do Trailer sem Autoplay
-    const trailerUrl = useMemo(() => {
-        if (data && 'trailer' in data && data.trailer?.embed_url) {
-            try {
-                const url = new URL(data.trailer.embed_url);
-                url.hostname = 'www.youtube-nocookie.com';
-                url.searchParams.set('autoplay', '0');
-                url.searchParams.set('rel', '0');
-                url.searchParams.set('modestbranding', '1');
-                return url.toString();
-            } catch (e) {
-                return data.trailer.embed_url.replace("youtube.com", "youtube-nocookie.com");
-            }
-        }
-        return null;
+    // Lógica de Processamento do Trailer
+    const trailer = useMemo(() => {
+        // Se não for anime ou não tiver data, some.
+        if (!data || !('trailer' in data)) return null;
+
+        // Tenta pegar o ID do YouTube de qualquer lugar possível
+        const trailerData = data.trailer as any;
+        const id = trailerData?.youtube_id;
+
+        // Se NÃO tem ID, aí sim é indisponível
+        if (!id) return null;
+
+        // Se chegou aqui, temos um ID. Vamos construir o resto na mão se precisar.
+        return {
+            id: id,
+            url: trailerData?.url || `https://www.youtube.com/watch?v=${id}`,
+            thumb: trailerData?.images?.maximum_image_url ||
+                trailerData?.images?.large_image_url ||
+                `https://img.youtube.com/vi/${id}/maxresdefault.jpg`
+        };
     }, [data]);
 
     if (loading) {
@@ -265,19 +270,39 @@ export default function MediaDetailsLayout({
                                         </h3>
                                     </div>
 
-                                    {trailerUrl ? (
-                                        <div
-                                            className="relative aspect-video overflow-hidden rounded-[2.5rem] border bg-black shadow-2xl"
-                                            style={{ borderColor: hexToRgba(textColor, 0.05) }}
+                                    {trailer ? (
+                                        <motion.div
+                                            whileTap={{ scale: 0.98 }}
+                                            className="relative aspect-video overflow-hidden rounded-[2.5rem] border bg-zinc-900 shadow-2xl group cursor-pointer"
+                                            style={{ borderColor: hexToRgba(textColor, 0.1) }}
+                                            onClick={() => window.open(trailer.url, '_blank')}
                                         >
-                                            <iframe
-                                                src={trailerUrl}
-                                                className="absolute inset-0 w-full h-full"
-                                                loading="lazy"
-                                                allowFullScreen
-                                                allow="encrypted-media; picture-in-picture"
+                                            <img
+                                                src={trailer.thumb}
+                                                className="w-full h-full object-cover opacity-60 group-hover:opacity-40 transition-opacity duration-500"
+                                                alt="Trailer Thumbnail"
+                                                onError={(e) => {
+                                                    (e.target as HTMLImageElement).src = `https://img.youtube.com/vi/${trailer.id}/hqdefault.jpg`;
+                                                }}
                                             />
-                                        </div>
+
+                                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+                                                <div
+                                                    className="w-20 h-20 rounded-full flex items-center justify-center backdrop-blur-md border border-white/20 transition-all duration-300 group-hover:scale-110 group-hover:bg-red-600 group-hover:border-red-600 shadow-2xl"
+                                                    style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}
+                                                >
+                                                    <Youtube size={40} color="white" fill="white" />
+                                                </div>
+                                                <div className="text-center">
+                                                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white">Assistir Trailer</p>
+                                                    <p className="text-[8px] font-bold uppercase tracking-widest text-white/40">YouTube</p>
+                                                </div>
+                                            </div>
+
+                                            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+                                                style={{ background: `radial-gradient(circle at center, ${hexToRgba(theme.primary, 0.15)} 0%, transparent 70%)` }}
+                                            />
+                                        </motion.div>
                                     ) : (
                                         <div
                                             className="aspect-video flex flex-col items-center justify-center rounded-[2.5rem] border-2 border-dashed gap-4"
@@ -286,7 +311,7 @@ export default function MediaDetailsLayout({
                                                 color: hexToRgba(textColor, 0.3)
                                             }}
                                         >
-                                            <Plus size={24} className="rotate-45" />
+                                            <Youtube size={32} className="opacity-20" />
                                             <span className="text-[10px] font-black uppercase tracking-widest">Trailer Indisponível</span>
                                         </div>
                                     )}
@@ -308,21 +333,23 @@ export default function MediaDetailsLayout({
                                 </div>
                             </div>
                         )}
-                        {/* Outras abas */}
+
                         {activeTab === 'episodes' && (
                             <div className="border rounded-[2.5rem] p-6 sm:p-8 shadow-2xl bg-zinc-900/10" style={{ borderColor: hexToRgba(textColor, 0.05) }}>
                                 <MediaEpisodesTab
-                                    animeId={Number(data.mal_id)} 
+                                    animeId={Number(data.mal_id)}
                                     mediaType={'episodes' in data ? 'anime' : 'manga'}
                                     animeTitle={data.title}
                                 />
                             </div>
                         )}
+
                         {activeTab === 'characters' && (
                             <div className="border rounded-[2.5rem] p-6 sm:p-8 shadow-2xl bg-zinc-900/10" style={{ borderColor: hexToRgba(textColor, 0.05) }}>
                                 <MediaCharactersTab />
                             </div>
                         )}
+
                         {activeTab === 'reviews' && (
                             <div className="max-w-3xl mx-auto px-2">
                                 <MediaReviewsTab />
