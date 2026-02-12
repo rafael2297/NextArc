@@ -1,5 +1,5 @@
 {
-  "name": "nesxtarc",
+  "name": "nextarc",
   "version": "1.0.1",
   "description": "Seu tracker de multiverso favorito",
   "author": "rafael2297 <rafael22celio@gmail.com>",
@@ -48,13 +48,13 @@
     "wait-on": "^8.0.1"
   },
   "build": {
-    "appId": "com.nesxtarc.app",
-    "productName": "NesxtArc",
+    "appId": "com.nextarc.app",
+    "productName": "NextArc",
     "publish": [
       {
         "provider": "github",
         "owner": "rafael2297",
-        "repo": "NesxtArc"
+        "repo": "NextArc"
       }
     ],
     "directories": {
@@ -62,9 +62,9 @@
       "buildResources": "build"
     },
     "protocols": {
-      "name": "nesxtarc-protocol",
+      "name": "nextarc-protocol",
       "schemes": [
-        "nesxtarc"
+        "nextarc"
       ]
     },
     "extraResources": [
@@ -95,7 +95,7 @@
     "nsis": {
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
-      "uninstallDisplayName": "NesxtArc",
+      "uninstallDisplayName": "NextArc",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
