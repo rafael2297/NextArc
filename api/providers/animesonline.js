@@ -158,4 +158,65 @@ async function extractVideo(pageUrl) {
     }
 }
 
-module.exports = { search, extractVideo };
+async function getRecentEpisodes(page = 1) {
+    try {
+        // Ajustado para a URL que você confirmou
+        const url = page > 1
+            ? `https://animesonlinecc.to/episodio/page/${page}/`
+            : `https://animesonlinecc.to/episodio/`;
+
+        console.log(`[AnimesOnline] 🌐 Scrapping: ${url}`);
+
+        const { data } = await axios.get(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Referer': 'https://animesonlinecc.to/'
+            }
+        });
+
+        const $ = cheerio.load(data);
+        const episodes = [];
+
+        // SELETOR EXATO baseado no HTML que você mandou: <article class="item se episodes">
+        $('article.item.se.episodes').each((_, el) => {
+            const linkTag = $(el).find('.eptitle h3 a');
+            const fullTitle = linkTag.text().trim(); // "Oshi no Ko 3 Episodio 5"
+            const link = linkTag.attr('href'); // URL completa do episódio
+
+            // Imagem dentro da div .poster
+            const image = $(el).find('.poster img').attr('src');
+
+            if (link && fullTitle) {
+                // Regex para pegar o número do episódio no final da frase
+                const epMatch = fullTitle.match(/Episodio\s+(\d+)/i);
+                const episodeNumber = epMatch ? epMatch[1] : "??";
+
+                // Limpa o título (remove "Episodio X")
+                const animeTitle = fullTitle.replace(/Episodio\s+\d+/i, '').trim();
+
+                // Extrai o ID para navegação
+                // Ex: ".../episodio/oshi-no-ko-3-episodio-5/" -> "oshi-no-ko-3"
+                const urlParts = link.split('/').filter(Boolean);
+                const lastPart = urlParts[urlParts.length - 1];
+                const animeId = lastPart.replace(/-episodio-\d+/i, '');
+
+                episodes.push({
+                    id: link,
+                    title: animeTitle,
+                    image: image,
+                    episodeNumber: episodeNumber,
+                    animeId: animeId
+                });
+            }
+        });
+
+        console.log(`[AnimesOnline] ✅ Sucesso! ${episodes.length} episódios capturados.`);
+        return episodes;
+    } catch (error) {
+        console.error('[AnimesOnline] ❌ Erro no Scraping:', error.message);
+        return [];
+    }
+}
+
+
+module.exports = { search, extractVideo, getRecentEpisodes };

@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import {
   Play,
   BookOpen,
@@ -6,11 +7,14 @@ import {
   Zap,
   LayoutGrid,
   ChevronRight,
+  ChevronLeft,
   Plus,
-  PlayCircle
+  PlayCircle,
+  Loader2
 } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
+import axios from 'axios'
 
 import { useAppStore } from '../store/useAppStore'
 import { useProfileStore } from '../store/useProfileStore'
@@ -18,17 +22,47 @@ import HomeActivityCard from '../components/cards/HomeActivityCard'
 import { ROUTES } from '../routes/paths'
 import { hexToRgba, getContrastColor } from '../utils/colors'
 
+// Interface para os dados vindos do scraping da sua API
+interface RecentEpisode {
+  id: string;
+  title: string;
+  image: string;
+  episodeNumber: string;
+  animeId: string;
+}
+
 export default function Home() {
   const navigate = useNavigate()
   const { animeList, mangaList, inventory } = useAppStore()
   const profile = useProfileStore((state) => state.profile)
   const theme = profile.theme
 
+  // --- ESTADOS PARA LANÇAMENTOS (SCRAPING) ---
+  const [recentEpisodes, setRecentEpisodes] = useState<RecentEpisode[]>([])
+  const [currentPage, setCurrentPage] = useState(1)
+  const [isLoading, setIsLoading] = useState(true)
+
   const textColor = getContrastColor(theme.background)
   const subTextColor = hexToRgba(textColor, 0.6)
 
+  // --- BUSCA DE EPISÓDIOS DA API ---
+  useEffect(() => {
+    async function fetchEpisodes() {
+      setIsLoading(true)
+      try {
+        // Altere para a porta/rota correta da sua API do Electron
+        const response = await axios.get(`http://127.0.0.1:3000/api/episodes?page=${currentPage}`)
+        setRecentEpisodes(response.data)
+      } catch (error) {
+        console.error("Erro ao carregar episódios:", error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchEpisodes()
+  }, [currentPage])
+
   // --- LÓGICA: CONTINUAR ASSISTINDO ---
-  // Filtra itens em andamento e ordena pelo acesso mais recente
   const lastWatched = [...animeList, ...mangaList]
     .filter(item => {
       const progress = item.type === 'anime' ? item.currentEpisode : (item as any).currentChapter;
@@ -178,7 +212,7 @@ export default function Home() {
           </motion.button>
         </div>
 
-        {/* --- SEÇÃO CONTINUAR ASSISTINDO (NOVO) --- */}
+        {/* --- SEÇÃO CONTINUAR ASSISTINDO --- */}
         {lastWatched && (
           <motion.section
             initial={{ opacity: 0, y: 20 }}
@@ -230,6 +264,115 @@ export default function Home() {
             </div>
           </motion.section>
         )}
+
+        {/* --- LANÇAMENTOS RECENTES (SCRAPING) --- */}
+        <section className="space-y-6">
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-3">
+              <div
+                className="p-2.5 border border-white/5 rounded-2xl shadow-xl backdrop-blur-md"
+                style={{ backgroundColor: hexToRgba(theme.navbar, 0.5) }}
+              >
+                <Zap size={20} style={{ color: theme.primary }} />
+              </div>
+              <h2 className="text-sm font-black uppercase tracking-[0.2em] italic" style={{ color: textColor }}>
+                Últimos Lançamentos
+              </h2>
+            </div>
+
+            {/* Controles de Paginação Superior */}
+            <div className="flex items-center gap-4">
+              <button
+                disabled={currentPage === 1 || isLoading}
+                onClick={() => setCurrentPage(prev => prev - 1)}
+                className="p-2 rounded-full transition-all hover:bg-white/10 disabled:opacity-20"
+                style={{ color: textColor }}
+              >
+                <ChevronLeft size={20} />
+              </button>
+              <span className="text-[10px] font-black italic uppercase tracking-widest" style={{ color: theme.primary }}>
+                Página {currentPage}
+              </span>
+              <button
+                disabled={isLoading}
+                onClick={() => setCurrentPage(prev => prev + 1)}
+                className="p-2 rounded-full transition-all hover:bg-white/10 disabled:opacity-20"
+                style={{ color: textColor }}
+              >
+                <ChevronRight size={20} />
+              </button>
+            </div>
+          </div>
+
+          {isLoading ? (
+            <div className="h-64 flex flex-col items-center justify-center gap-4">
+              <Loader2 className="animate-spin" size={40} style={{ color: theme.primary }} />
+              <p className="text-[10px] font-black uppercase italic tracking-widest" style={{ color: subTextColor }}>
+                Sincronizando com o Multiverso...
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-5">
+                <AnimatePresence mode="wait">
+                  {recentEpisodes.map((ep, index) => (
+                    <motion.div
+                      key={ep.id + index}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      transition={{ delay: index * 0.05 }}
+                      onClick={() => navigate(`/media/anime/search:${encodeURIComponent(ep.title)}?tab=episodes`)}
+                      className="group cursor-pointer space-y-3"
+                    >
+                      <div className="relative aspect-video overflow-hidden rounded-[2rem] border border-white/5 shadow-xl bg-black/20">
+                        <img
+                          src={ep.image}
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                          alt={ep.title}
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60" />
+                        <div className="absolute bottom-3 left-4">
+                          <span className="text-[9px] font-black uppercase bg-white/10 backdrop-blur-md px-2 py-1 rounded-lg border border-white/10 text-white">
+                            EP {ep.episodeNumber}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="px-2">
+                        <h4 className="text-[11px] font-black uppercase italic truncate tracking-tighter" style={{ color: textColor }}>
+                          {ep.title}
+                        </h4>
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+
+              {/* Paginação Numérica Inferior */}
+              <div className="flex justify-center items-center gap-2 pt-4">
+                {[...Array(5)].map((_, i) => {
+                  const pageNum = Math.max(1, currentPage - 2) + i;
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setCurrentPage(pageNum)}
+                      className="w-10 h-10 rounded-2xl font-black italic text-xs transition-all border"
+                      style={{
+                        backgroundColor: currentPage === pageNum ? theme.primary : 'transparent',
+                        borderColor: hexToRgba(theme.primary, 0.3),
+                        color: currentPage === pageNum ? getContrastColor(theme.primary) : textColor,
+                        opacity: isLoading ? 0.5 : 1
+                      }}
+                    >
+                      {pageNum}
+                    </button>
+                  )
+                })}
+              </div>
+            </>
+          )}
+        </section>
 
         {/* ATIVIDADE RECENTE */}
         <section className="space-y-6">

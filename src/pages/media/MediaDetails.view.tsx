@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Check, Star, Trophy, Tv, Activity, Youtube } from 'lucide-react'
+import { Plus, Check, Star, Trophy, Tv, Activity, Youtube, Search } from 'lucide-react'
 
 import Layout from '../../components/layout/Layout'
 import { useProfileStore } from '../../store/useProfileStore'
@@ -27,6 +27,9 @@ interface Props {
     mediaType: MediaType
     isAdded: boolean
     onAdd: () => void
+    // Novos campos para a lógica de Match
+    suggestions?: MediaData[]
+    onSelectSuggestion?: (id: number) => void
 }
 
 const tabs: { key: MediaTab; label: string }[] = [
@@ -68,6 +71,8 @@ export default function MediaDetailsLayout({
     data,
     isAdded,
     onAdd,
+    suggestions = [],
+    onSelectSuggestion
 }: Props) {
     const [activeTab, setActiveTab] = useState<MediaTab>('info')
     const profile = useProfileStore((state) => state.profile)
@@ -76,17 +81,11 @@ export default function MediaDetailsLayout({
 
     // Lógica de Processamento do Trailer
     const trailer = useMemo(() => {
-        // Se não for anime ou não tiver data, some.
         if (!data || !('trailer' in data)) return null;
-
-        // Tenta pegar o ID do YouTube de qualquer lugar possível
         const trailerData = data.trailer as any;
         const id = trailerData?.youtube_id;
-
-        // Se NÃO tem ID, aí sim é indisponível
         if (!id) return null;
 
-        // Se chegou aqui, temos um ID. Vamos construir o resto na mão se precisar.
         return {
             id: id,
             url: trailerData?.url || `https://www.youtube.com/watch?v=${id}`,
@@ -96,6 +95,7 @@ export default function MediaDetailsLayout({
         };
     }, [data]);
 
+    // --- TELA DE CARREGAMENTO ---
     if (loading) {
         return (
             <Layout>
@@ -107,18 +107,82 @@ export default function MediaDetailsLayout({
         )
     }
 
-    if (error || !data) {
+    // --- TELA DE MATCH (SUGESTÕES) ---
+    // Exibida quando a busca por nome retorna vários resultados duvidosos
+    if (suggestions.length > 0 && !data) {
         return (
             <Layout>
-                <div className="flex flex-col items-center justify-center py-20">
-                    <p className="font-bold uppercase tracking-widest text-xs" style={{ color: theme.primary }}>
-                        Erro ao carregar mídia
-                    </p>
+                <div className="pt-24 px-4 max-w-6xl mx-auto">
+                    <div className="flex flex-col items-center mb-12 text-center">
+                        <div className="p-4 rounded-full mb-6" style={{ backgroundColor: hexToRgba(theme.primary, 0.1) }}>
+                            <Search size={32} style={{ color: theme.primary }} />
+                        </div>
+                        <h2 className="text-2xl sm:text-4xl font-black italic uppercase tracking-tighter" style={{ color: textColor }}>
+                            Vários resultados encontrados
+                        </h2>
+                        <p className="opacity-50 text-xs font-bold uppercase tracking-widest mt-2" style={{ color: textColor }}>
+                            Selecione o anime correto para continuar
+                        </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+                        {suggestions.map((item, index) => (
+                            <motion.div
+                                key={item.mal_id}
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: index * 0.05 }}
+                                onClick={() => onSelectSuggestion?.(item.mal_id)}
+                                className="group cursor-pointer space-y-3"
+                            >
+                                <div className="relative aspect-[3/4] overflow-hidden rounded-3xl border shadow-xl transition-all group-hover:scale-105"
+                                    style={{ borderColor: hexToRgba(textColor, 0.1) }}>
+                                    <img
+                                        src={item.images.jpg.large_image_url || item.images.jpg.image_url}
+                                        alt={item.title}
+                                        className="w-full h-full object-cover"
+                                    />
+                                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <Check size={32} className="text-white" />
+                                    </div>
+                                </div>
+                                <div className="px-1">
+                                    <h3 className="text-[11px] font-black uppercase tracking-tight leading-tight line-clamp-2" style={{ color: textColor }}>
+                                        {item.title}
+                                    </h3>
+                                    <p className="text-[9px] opacity-40 font-bold uppercase mt-1" style={{ color: textColor }}>
+                                        {(item as any).type} • {(item as any).year || (item as any).status}
+                                    </p>
+                                </div>
+                            </motion.div>
+                        ))}
+                    </div>
                 </div>
             </Layout>
         )
     }
 
+    // --- TELA DE ERRO ---
+    if (error || !data) {
+        return (
+            <Layout>
+                <div className="flex flex-col items-center justify-center py-40">
+                    <p className="font-bold uppercase tracking-widest text-xs" style={{ color: theme.primary }}>
+                        Mídia não encontrada
+                    </p>
+                    <button
+                        onClick={() => window.history.back()}
+                        className="mt-4 text-[10px] font-black uppercase opacity-50 hover:opacity-100 transition-opacity"
+                        style={{ color: textColor }}
+                    >
+                        Voltar para o início
+                    </button>
+                </div>
+            </Layout>
+        )
+    }
+
+    // --- VARIÁVEIS DE DADOS ---
     const cover = data.images.jpg.large_image_url || data.images.jpg.image_url
     const score = data.score
     const rank = data.rank

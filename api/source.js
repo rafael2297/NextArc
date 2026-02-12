@@ -103,6 +103,18 @@ app.get('/api/search', async (req, res) => {
 });
 
 /* =======================
+    🔥 3. ROTA DE LANÇAMENTOS
+======================= */
+app.get('/api/episodes', async (req, res) => {
+    const page = parseInt(req.query.page) || 1;
+    try {
+        const episodes = await animesonline.getRecentEpisodes(page);
+        res.json(episodes);
+    } catch (e) {
+        res.status(500).json([]);
+    }
+});
+/* =======================
    START
 ======================= */
 const PORT = 3000
