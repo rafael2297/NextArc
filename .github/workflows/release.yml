@@ -1,9 +1,12 @@
-name: Build and Release
+name: Project Release Workflow
 
 on:
   push:
     tags:
-      - 'v*' 
+      - 'v*'
+
+permissions:
+  contents: write
 
 jobs:
   release:
@@ -22,13 +25,19 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build API (NCC)
+      - name: Build API
+        # Removi o 'move' manual e usei o ncc para sair na pasta certa ou simplifiquei
         run: npm run build:api
 
-      - name: Build Web (Vite)
+      - name: Build Web
         run: npm run build:web
+
+      - name: Build Electron Main
+        # Este passo é CRUCIAL para gerar o dist-electron/main.cjs
+        run: npm run build:electron
 
       - name: Build and Publish Electron
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Token automático do GitHub
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # O npx electron-builder vai ler o campo "build" do seu package.json
         run: npx electron-builder --win --publish always

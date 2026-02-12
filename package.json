@@ -1,13 +1,15 @@
 {
   "name": "nesxtarc",
   "version": "1.0.1",
+  "description": "Seu tracker de multiverso favorito",
+  "author": "rafael2297 <rafael22celio@gmail.com>",
   "type": "module",
   "main": "dist-electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "api": "node api/index.js",
     "build:web": "vite build",
-    "build:api": "ncc build api/source.js -o api_dist && move api_dist\\index.js api\\index.js",
+    "build:api": "ncc build api/source.js -o api",
     "build:electron": "tsc -p tsconfig.electron.json && node -e \"const fs=require('fs'); if(fs.existsSync('dist-electron/main.js')){fs.renameSync('dist-electron/main.js', 'dist-electron/main.cjs')}; if(fs.existsSync('dist-electron/preload.js')){fs.renameSync('dist-electron/preload.js', 'dist-electron/preload.cjs')}\"",
     "build": "npm run clean && npm run build:api && npm run build:web && npm run build:electron && npx electron-builder --win",
     "clean": "if exist dist rmdir /s /q dist && if exist dist-electron rmdir /s /q dist-electron && if exist release rmdir /s /q release && if exist api_dist rmdir /s /q api_dist"
