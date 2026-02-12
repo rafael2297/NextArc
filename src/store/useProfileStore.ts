@@ -16,6 +16,7 @@ export type UserProfile = {
     theme: UserTheme;
     provider: AuthProvider
     accessToken?: string
+    version?: string;
 }
 
 type ProfileStore = {

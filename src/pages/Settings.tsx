@@ -9,15 +9,16 @@ import {
     BookOpen,
     ArrowLeft,
     Palette,
-    Pipette,
     ChevronDown,
-    Settings2,
     Check,
     Image as ImageIcon,
     X,
     CloudUpload,
     RefreshCw,
     AlertCircle,
+    Rocket,
+    Sparkles,
+    DownloadCloud
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useState, useRef } from 'react'
@@ -28,13 +29,12 @@ import { useProfileController } from '../hooks/useSettingsController'
 import { useSessionStore } from '../store/useSessionStore'
 import { ROUTES } from '../routes/paths'
 import { hexToRgba } from '../utils/colors'
-import { useToast } from '../components/toast/useToast'
 
 export default function Settings() {
     const navigate = useNavigate()
-    const { showToast } = useToast()
     const fileInputRef = useRef<HTMLInputElement>(null)
     const bannerInputRef = useRef<HTMLInputElement>(null)
+
     const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
     const [isSelectOpen, setIsSelectOpen] = useState(false)
 
@@ -54,12 +54,18 @@ export default function Settings() {
         isSaving,
         updateSpecificColor,
         updateFullTheme,
-        updateBannerImage
+        updateBannerImage,
+        // Novos estados vindos do controller atualizado
+        isCheckingUpdate,
+        updateStatus,
+        downloadProgress,
+        checkForUpdates,
+        startUpdateDownload,
+        installUpdate
     } = useProfileController()
 
     const { nsfwMode, setNSFWMode } = useSessionStore()
 
-    // Lógica para detectar se o token parece expirado ou inválido
     const isTokenInvalid = !profile.accessToken || profile.accessToken.includes('nesxtarc://');
 
     const currentTheme = {
@@ -69,27 +75,6 @@ export default function Settings() {
     };
 
     const isLight = currentTheme.background.toLowerCase() === '#ffffff' || currentTheme.background.toLowerCase() === 'white';
-
-    const handleRemoveBanner = () => {
-        updateBannerImage(null);
-    };
-
-    // Função aprimorada para Backup Manual
-    const handleManualBackup = async () => {
-        if (isSaving) return;
-
-        if (isTokenInvalid) {
-            console.log("Sessão expirada, abrindo Google Auth direto...");
-            await connectGoogle();
-            return;
-        }
-
-        try {
-            await exportToDrive();
-        } catch (err) {
-            console.error("Erro no backup manual:", err);
-        }
-    };
 
     const themePresets = [
         { name: 'Cyber Blue', colors: { primary: '#3b82f6', background: '#000000', navbar: '#111111' } },
@@ -118,7 +103,7 @@ export default function Settings() {
             <input type="file" ref={fileInputRef} onChange={importProfile} className="hidden" accept=".json" />
             <input type="file" ref={bannerInputRef} onChange={(e) => e.target.files?.[0] && updateBannerImage(e.target.files[0])} className="hidden" accept="image/*" />
 
-            {/* BOTÃO VOLTAR */}
+            {/* VOLTAR */}
             <div className="fixed top-20 left-6 z-[9999]">
                 <button
                     onClick={() => navigate(ROUTES.PROFILE)}
@@ -133,7 +118,7 @@ export default function Settings() {
                 </button>
             </div>
 
-            {/* HEADER DESIGN */}
+            {/* HEADER */}
             <div className="relative h-[350px] flex flex-col items-center justify-center overflow-hidden">
                 <div className="absolute inset-0">
                     {profile.banner ? (
@@ -150,7 +135,7 @@ export default function Settings() {
                         style={{ borderColor: isLight ? '#fff' : '#111' }}
                         alt="Avatar"
                     />
-                    <h1 className="mt-4 text-2xl font-black italic uppercase tracking-tighter" style={{ color: isLight ? '#000' : '#fff' }}>
+                    <h1 className="mt-4 text-2xl font-black italic uppercase tracking-tighter">
                         {profile.name}
                     </h1>
                 </div>
@@ -167,194 +152,166 @@ export default function Settings() {
                                 borderColor: isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.05)'
                             }}>
                             <stat.icon size={16} className="mx-auto mb-1" style={{ color: currentTheme.primary }} />
-                            <p className="text-xl font-black" style={{ color: isLight ? '#000' : '#fff' }}>{stat.value}</p>
+                            <p className="text-xl font-black">{stat.value}</p>
                             <p className="text-[7px] uppercase tracking-widest text-zinc-500 font-bold">{stat.label}</p>
                         </div>
                     ))}
                 </section>
 
                 {/* PERSONALIZAÇÃO */}
-                <section
-                    className="backdrop-blur-xl border p-6 rounded-[2rem] shadow-2xl relative"
+                <section className="backdrop-blur-xl border p-6 rounded-[2rem] shadow-2xl relative"
                     style={{
                         backgroundColor: isLight ? '#ffffff' : 'rgba(24, 24, 27, 0.4)',
                         borderColor: isLight ? '#e4e4e7' : 'rgba(63, 63, 70, 0.5)',
                         zIndex: isSelectOpen ? 50 : 1
-                    }}
-                >
+                    }}>
                     <div className="flex items-center gap-3 mb-6 px-2">
                         <Palette size={18} style={{ color: currentTheme.primary }} />
                         <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em]">Estilo do App</h3>
                     </div>
 
                     <div className="space-y-3 mb-8">
-                        <label className="text-[9px] font-black uppercase text-zinc-500 ml-2 tracking-widest">Imagem de Capa (Banner)</label>
                         <div className="flex gap-2">
-                            <button
-                                onClick={() => bannerInputRef.current?.click()}
-                                className="flex-1 flex items-center justify-center gap-3 p-4 rounded-2xl border transition-all active:scale-95"
-                                style={{
-                                    backgroundColor: isLight ? '#f4f4f5' : '#09090b',
-                                    borderColor: isLight ? '#e4e4e7' : '#27272a',
-                                    color: isLight ? '#000' : '#fff'
-                                }}
-                            >
+                            <button onClick={() => bannerInputRef.current?.click()} className="flex-1 flex items-center justify-center gap-3 p-4 rounded-2xl border transition-all active:scale-95"
+                                style={{ backgroundColor: isLight ? '#f4f4f5' : '#09090b', borderColor: isLight ? '#e4e4e7' : '#27272a' }}>
                                 <ImageIcon size={18} style={{ color: currentTheme.primary }} />
-                                <span className="text-xs font-bold uppercase tracking-tight">Alterar Banner</span>
+                                <span className="text-xs font-bold uppercase">Banner</span>
                             </button>
-
                             {profile.banner && (
-                                <button
-                                    onClick={handleRemoveBanner}
-                                    className="w-14 flex items-center justify-center rounded-2xl border transition-all active:scale-90 hover:bg-red-500/10"
-                                    style={{
-                                        backgroundColor: isLight ? '#f4f4f5' : '#09090b',
-                                        borderColor: 'rgba(239, 68, 68, 0.2)',
-                                        color: '#ef4444'
-                                    }}
-                                >
+                                <button onClick={() => updateBannerImage(null)} className="w-14 flex items-center justify-center rounded-2xl border border-red-500/20 text-red-500"
+                                    style={{ backgroundColor: isLight ? '#f4f4f5' : '#09090b' }}>
                                     <X size={20} />
                                 </button>
                             )}
                         </div>
                     </div>
 
-                    {/* PRESETS DROPDOWN */}
-                    <div className="space-y-2 mb-8 relative">
-                        <label className="text-[9px] font-black uppercase text-zinc-500 ml-2 tracking-widest">Presets de Estilo</label>
-                        <button
-                            onClick={() => setIsSelectOpen(!isSelectOpen)}
-                            className="w-full flex items-center justify-between p-4 rounded-2xl border transition-all duration-300"
-                            style={{
-                                backgroundColor: isLight ? '#f4f4f5' : '#09090b',
-                                borderColor: isSelectOpen ? currentTheme.primary : (isLight ? '#e4e4e7' : '#27272a'),
-                                color: isLight ? '#000' : '#fff'
-                            }}
-                        >
+                    {/* PRESETS */}
+                    <div className="relative mb-8">
+                        <button onClick={() => setIsSelectOpen(!isSelectOpen)} className="w-full flex items-center justify-between p-4 rounded-2xl border transition-all"
+                            style={{ backgroundColor: isLight ? '#f4f4f5' : '#09090b', borderColor: isSelectOpen ? currentTheme.primary : (isLight ? '#e4e4e7' : '#27272a') }}>
                             <div className="flex items-center gap-3">
-                                <div className="w-5 h-5 rounded-full border-2 border-white/10" style={{ backgroundColor: currentTheme.primary }} />
-                                <span className="text-sm font-bold uppercase tracking-tight">
-                                    {themePresets.find(t => t.colors.background === currentTheme.background)?.name || "Personalizado"}
-                                </span>
+                                <div className="w-5 h-5 rounded-full" style={{ backgroundColor: currentTheme.primary }} />
+                                <span className="text-sm font-bold uppercase">Presets</span>
                             </div>
-                            <motion.div animate={{ rotate: isSelectOpen ? 180 : 0 }}>
-                                <ChevronDown size={20} className="text-zinc-500" />
-                            </motion.div>
+                            <ChevronDown size={20} className={`transition-transform ${isSelectOpen ? 'rotate-180' : ''}`} />
                         </button>
-
                         <AnimatePresence>
                             {isSelectOpen && (
-                                <>
-                                    <div className="fixed inset-0 z-[100]" onClick={() => setIsSelectOpen(false)} />
-                                    <motion.div
-                                        initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                                        animate={{ opacity: 1, y: 5, scale: 1 }}
-                                        exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                                        className="absolute left-0 right-0 z-[101] overflow-hidden rounded-3xl border shadow-2xl backdrop-blur-xl"
-                                        style={{
-                                            backgroundColor: isLight ? 'rgba(255,255,255,0.95)' : 'rgba(15, 15, 15, 0.95)',
-                                            borderColor: isLight ? '#e4e4e7' : '#27272a'
-                                        }}
-                                    >
-                                        <div className="max-h-[250px] overflow-y-auto p-2 space-y-1">
-                                            {themePresets.map((t) => {
-                                                const isActive = currentTheme.background === t.colors.background;
-                                                return (
-                                                    <button
-                                                        key={t.name}
-                                                        onClick={() => {
-                                                            updateFullTheme(t.colors);
-                                                            setIsSelectOpen(false);
-                                                        }}
-                                                        className="w-full flex items-center justify-between p-3 rounded-xl transition-all"
-                                                        style={{
-                                                            backgroundColor: isActive ? hexToRgba(t.colors.primary, 0.1) : 'transparent'
-                                                        }}
-                                                    >
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="relative">
-                                                                <div className="w-8 h-8 rounded-full shadow-inner" style={{ backgroundColor: t.colors.background }} />
-                                                                <div className="absolute -right-1 -bottom-1 w-4 h-4 rounded-full border-2"
-                                                                    style={{ backgroundColor: t.colors.primary, borderColor: isLight ? '#fff' : '#0f0f0f' }} />
-                                                            </div>
-                                                            <span className="text-xs font-bold uppercase tracking-wide" style={{ color: isLight ? '#121212' : '#eee' }}>
-                                                                {t.name}
-                                                            </span>
-                                                        </div>
-                                                        {isActive && <Check size={16} style={{ color: t.colors.primary }} />}
-                                                    </button>
-                                                )
-                                            })}
-                                        </div>
-                                    </motion.div>
-                                </>
-                            )}
-                        </AnimatePresence>
-                    </div>
-
-                    {/* CORES MANUAIS */}
-                    <div className="border-t pt-4" style={{ borderColor: isLight ? '#f4f4f5' : 'rgba(255,255,255,0.05)' }}>
-                        <button onClick={() => setIsAdvancedOpen(!isAdvancedOpen)} className="w-full flex items-center justify-between px-2 py-2">
-                            <div className="flex items-center gap-3">
-                                <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Ajuste Manual</span>
-                            </div>
-                            <motion.div animate={{ rotate: isAdvancedOpen ? 180 : 0 }}>
-                                <ChevronDown size={16} className="text-zinc-500" />
-                            </motion.div>
-                        </button>
-
-                        <AnimatePresence>
-                            {isAdvancedOpen && (
-                                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                                    <div className="space-y-3 pt-4 px-2">
-                                        {[
-                                            { label: 'Fundo', key: 'background' as const },
-                                            { label: 'Menus', key: 'navbar' as const },
-                                            { label: 'Destaque', key: 'primary' as const },
-                                        ].map((item) => (
-                                            <div key={item.key} className="flex items-center justify-between p-3 rounded-xl border"
-                                                style={{
-                                                    backgroundColor: isLight ? '#fafafa' : 'rgba(0,0,0,0.2)',
-                                                    borderColor: isLight ? '#f4f4f5' : 'rgba(255,255,255,0.05)'
-                                                }}>
-                                                <span className="text-[10px] font-bold text-zinc-400 uppercase">{item.label}</span>
-                                                <label className="relative cursor-pointer flex items-center gap-3">
-                                                    <div className="w-6 h-6 rounded-lg border border-white/10" style={{ backgroundColor: currentTheme[item.key] }} />
-                                                    <input type="color" value={currentTheme[item.key]} onChange={(e) => updateSpecificColor(item.key, e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
-                                                </label>
+                                <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 5 }} exit={{ opacity: 0 }} className="absolute w-full z-50 p-2 rounded-3xl border shadow-2xl backdrop-blur-2xl"
+                                    style={{ backgroundColor: isLight ? '#fff' : '#0f0f0f', borderColor: isLight ? '#e4e4e7' : '#27272a' }}>
+                                    {themePresets.map((t) => (
+                                        <button key={t.name} onClick={() => { updateFullTheme(t.colors); setIsSelectOpen(false); }} className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 transition-all">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-4 h-4 rounded-full" style={{ backgroundColor: t.colors.primary }} />
+                                                <span className="text-xs font-bold uppercase">{t.name}</span>
                                             </div>
-                                        ))}
-                                    </div>
+                                            {currentTheme.background === t.colors.background && <Check size={16} style={{ color: t.colors.primary }} />}
+                                        </button>
+                                    ))}
                                 </motion.div>
                             )}
                         </AnimatePresence>
                     </div>
+
+                    {/* AJUSTE MANUAL */}
+                    <div className="border-t pt-4" style={{ borderColor: isLight ? '#f4f4f5' : 'rgba(255,255,255,0.05)' }}>
+                        <button onClick={() => setIsAdvancedOpen(!isAdvancedOpen)} className="w-full flex items-center justify-between px-2">
+                            <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Ajuste Manual</span>
+                            <ChevronDown size={16} className={`transition-transform ${isAdvancedOpen ? 'rotate-180' : ''}`} />
+                        </button>
+                        {isAdvancedOpen && (
+                            <div className="grid grid-cols-3 gap-2 mt-4">
+                                {(['background', 'navbar', 'primary'] as const).map((key) => (
+                                    <div key={key} className="relative h-10 rounded-xl border flex items-center justify-center overflow-hidden" style={{ backgroundColor: currentTheme[key], borderColor: 'rgba(255,255,255,0.1)' }}>
+                                        <input type="color" value={currentTheme[key]} onChange={(e) => updateSpecificColor(key, e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                        <span className="text-[8px] font-black uppercase mix-blend-difference text-white">{key}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </section>
 
-                {/* PRIVACIDADE */}
-                <section className="backdrop-blur-xl border p-6 rounded-[2rem]"
+                {/* SOFTWARE UPDATE */}
+                <section className="backdrop-blur-xl border p-6 rounded-[2rem] relative group"
                     style={{
                         backgroundColor: isLight ? '#ffffff' : 'rgba(24, 24, 27, 0.4)',
                         borderColor: isLight ? '#e4e4e7' : 'rgba(63, 63, 70, 0.5)'
                     }}>
+                    <div className="flex items-center justify-between mb-6 px-2">
+                        <div className="flex items-center gap-3">
+                            <Rocket size={18} className="text-purple-500" />
+                            <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em]">Software</h3>
+                        </div>
+                        <span className="text-[9px] font-bold px-3 py-1 rounded-full bg-zinc-500/10 text-zinc-500">
+                            v{profile?.version || "1.0.1"}
+                        </span>
+                    </div>
+
+                    {/* Botão de Update Inteligente */}
+                    <button
+                        onClick={() => {
+                            if (updateStatus === 'available') startUpdateDownload();
+                            else if (updateStatus === 'ready') installUpdate();
+                            else checkForUpdates();
+                        }}
+                        disabled={isCheckingUpdate || updateStatus === 'downloading'}
+                        className="w-full relative overflow-hidden active:scale-[0.98] transition-all"
+                    >
+                        <div className="relative z-10 py-4 rounded-2xl flex items-center justify-center gap-3 border transition-all"
+                            style={{
+                                backgroundColor: isLight ? '#f4f4f5' : '#09090b',
+                                borderColor: (isCheckingUpdate || updateStatus === 'downloading') ? currentTheme.primary : (isLight ? '#e4e4e7' : '#27272a')
+                            }}>
+
+                            {isCheckingUpdate || updateStatus === 'downloading' ? (
+                                <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
+                                    <RefreshCw size={18} style={{ color: currentTheme.primary }} />
+                                </motion.div>
+                            ) : updateStatus === 'ready' ? (
+                                <Rocket size={18} className="text-green-500" />
+                            ) : (
+                                <DownloadCloud size={18} style={{ color: currentTheme.primary }} />
+                            )}
+
+                            <span className="text-[10px] font-black uppercase tracking-widest">
+                                {isCheckingUpdate ? 'Verificando...' :
+                                    updateStatus === 'available' ? 'Baixar Atualização' :
+                                        updateStatus === 'downloading' ? `Baixando ${downloadProgress}%` :
+                                            updateStatus === 'ready' ? 'Reiniciar agora' :
+                                                updateStatus === 'latest' ? 'Versão mais recente' : 'Verificar Atualizações'}
+                            </span>
+                        </div>
+
+                        {/* Barra de Progresso Real */}
+                        {updateStatus === 'downloading' && (
+                            <motion.div
+                                className="absolute bottom-0 left-0 h-1 bg-blue-500 z-20"
+                                initial={{ width: 0 }}
+                                animate={{ width: `${downloadProgress}%` }}
+                            />
+                        )}
+                    </button>
+                </section>
+
+                {/* PRIVACIDADE */}
+                <section className="backdrop-blur-xl border p-6 rounded-[2rem]"
+                    style={{ backgroundColor: isLight ? '#ffffff' : 'rgba(24, 24, 27, 0.4)', borderColor: isLight ? '#e4e4e7' : 'rgba(63, 63, 70, 0.5)' }}>
                     <div className="flex items-center gap-3 mb-6 px-2">
                         <EyeOff size={18} className="text-rose-500" />
                         <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em]">Conteúdo Sensível</h3>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                         {['hide', 'blur', 'show'].map((mode) => (
-                            <button
-                                key={mode}
-                                onClick={() => setNSFWMode(mode as any)}
-                                className="p-4 rounded-2xl border flex flex-col items-center gap-2 transition-all"
+                            <button key={mode} onClick={() => setNSFWMode(mode as any)} className="p-4 rounded-2xl border flex flex-col items-center gap-2 transition-all uppercase text-[8px] font-black"
                                 style={{
-                                    backgroundColor: nsfwMode === mode ? hexToRgba(currentTheme.primary, 0.1) : (isLight ? '#f4f4f5' : '#09090b'),
-                                    borderColor: nsfwMode === mode ? currentTheme.primary : (isLight ? '#e4e4e7' : '#27272a'),
+                                    backgroundColor: nsfwMode === mode ? hexToRgba(currentTheme.primary, 0.1) : 'transparent',
+                                    borderColor: nsfwMode === mode ? currentTheme.primary : 'rgba(255,255,255,0.05)',
                                     color: nsfwMode === mode ? currentTheme.primary : '#71717a'
-                                }}
-                            >
+                                }}>
                                 {mode === 'hide' ? <EyeOff size={20} /> : mode === 'blur' ? <Droplets size={20} /> : <Eye size={20} />}
-                                <span className="text-[8px] font-black uppercase tracking-widest">{mode}</span>
+                                {mode}
                             </button>
                         ))}
                     </div>
@@ -362,101 +319,47 @@ export default function Settings() {
 
                 {/* SINCRONIZAÇÃO */}
                 <section className="backdrop-blur-xl border rounded-[2rem] p-6 space-y-4"
-                    style={{
-                        backgroundColor: isLight ? '#ffffff' : 'rgba(24, 24, 27, 0.4)',
-                        borderColor: isLight ? '#e4e4e7' : 'rgba(63, 63, 70, 0.5)'
-                    }}>
-
+                    style={{ backgroundColor: isLight ? '#ffffff' : 'rgba(24, 24, 27, 0.4)', borderColor: isLight ? '#e4e4e7' : 'rgba(63, 63, 70, 0.5)' }}>
                     <div className="flex items-center justify-between px-2">
                         <div className="flex items-center gap-4">
                             <Database size={20} style={{ color: isTokenInvalid ? '#f59e0b' : currentTheme.primary }} />
                             <div>
-                                <h3 className="text-xs font-black uppercase tracking-tight" style={{ color: isLight ? '#000' : '#fff' }}>Google Drive</h3>
-                                <p className="text-[9px] text-zinc-500 font-bold uppercase">
-                                    {isTokenInvalid ? 'Sessão Expirada' : 'Backup em Nuvem'}
-                                </p>
+                                <h3 className="text-xs font-black uppercase">Google Drive</h3>
+                                <p className="text-[9px] text-zinc-500 font-bold uppercase">{isTokenInvalid ? 'Sessão Expirada' : 'Nuvem'}</p>
                             </div>
                         </div>
-                        <button
-                            onClick={enableDrive}
-                            disabled={isSaving}
-                            className="w-12 h-6 rounded-full relative transition-all"
-                            style={{ backgroundColor: driveEnabled ? currentTheme.primary : (isLight ? '#e4e4e7' : '#27272a') }}
-                        >
-                            <motion.div animate={{ x: driveEnabled ? 26 : 4 }} className="absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm" />
+                        <button onClick={enableDrive} className="w-12 h-6 rounded-full relative transition-all"
+                            style={{ backgroundColor: driveEnabled ? currentTheme.primary : '#27272a' }}>
+                            <motion.div animate={{ x: driveEnabled ? 26 : 4 }} className="absolute top-1 w-4 h-4 bg-white rounded-full" />
                         </button>
                     </div>
 
-                    <AnimatePresence>
-                        {driveEnabled && (
-                            <motion.div
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{ opacity: 1, height: 'auto' }}
-                                exit={{ opacity: 0, height: 0 }}
-                                className="space-y-2 overflow-hidden"
-                            >
-                                {isTokenInvalid && (
-                                    <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-3 mb-2">
-                                        <AlertCircle size={16} className="text-amber-500 shrink-0" />
-                                        <p className="text-[9px] font-bold text-amber-500 uppercase leading-tight">Sua sessão expirou. Reconecte para salvar.</p>
-                                    </div>
-                                )}
-
-                                <div className="grid grid-cols-2 gap-2">
-                                    <button
-                                        onClick={handleManualBackup}
-                                        disabled={isSaving}
-                                        className="py-4 rounded-2xl flex items-center justify-center gap-2 border border-dashed transition-all active:scale-95"
-                                        style={{
-                                            borderColor: isTokenInvalid ? '#f59e0b' : currentTheme.primary,
-                                            color: isTokenInvalid ? '#f59e0b' : currentTheme.primary,
-                                            backgroundColor: isTokenInvalid ? '#f59e0b10' : `${currentTheme.primary}10`
-                                        }}
-                                    >
-                                        <CloudUpload size={16} className={isSaving ? 'animate-bounce' : ''} />
-                                        <span className="text-[10px] font-black uppercase">
-                                            {isSaving ? 'Salvando...' : isTokenInvalid ? 'Reconectar' : 'Backup Agora'}
-                                        </span>
-                                    </button>
-
-                                    <button
-                                        onClick={() => restoreFromDrive()}
-                                        disabled={isSaving}
-                                        className="py-4 rounded-2xl flex items-center justify-center gap-2 border border-dashed transition-all active:scale-95 text-zinc-500 border-zinc-500/30 bg-zinc-500/5"
-                                    >
-                                        <RefreshCw size={16} className={isSaving ? 'animate-spin' : ''} />
-                                        <span className="text-[10px] font-black uppercase">Restaurar</span>
-                                    </button>
-                                </div>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
+                    {driveEnabled && (
+                        <div className="grid grid-cols-2 gap-2">
+                            <button onClick={exportToDrive} disabled={isSaving} className="py-4 rounded-2xl border border-dashed flex items-center justify-center gap-2 text-[10px] font-black uppercase"
+                                style={{ borderColor: currentTheme.primary, color: currentTheme.primary }}>
+                                <CloudUpload size={16} className={isSaving ? 'animate-bounce' : ''} /> {isSaving ? '...' : 'Backup'}
+                            </button>
+                            <button onClick={restoreFromDrive} className="py-4 rounded-2xl border border-dashed border-zinc-500/30 text-zinc-500 text-[10px] font-black uppercase">
+                                <RefreshCw size={16} /> Restaurar
+                            </button>
+                        </div>
+                    )}
 
                     <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/5">
-                        <button onClick={exportProfileJson} className="py-4 rounded-2xl font-black text-[9px] uppercase transition-all" style={{ backgroundColor: isLight ? '#f4f4f5' : '#27272a', color: isLight ? '#000' : '#fff' }}>Exportar JSON</button>
-                        <button onClick={() => fileInputRef.current?.click()} className="py-4 rounded-2xl font-black text-[9px] uppercase transition-all" style={{ backgroundColor: isLight ? '#f4f4f5' : '#27272a', color: isLight ? '#000' : '#fff' }}>Importar JSON</button>
+                        <button onClick={exportProfileJson} className="py-4 rounded-2xl font-black text-[9px] uppercase bg-zinc-500/10">Exportar JSON</button>
+                        <button onClick={() => fileInputRef.current?.click()} className="py-4 rounded-2xl font-black text-[9px] uppercase bg-zinc-500/10">Importar JSON</button>
                     </div>
                 </section>
 
                 {/* CONTA & PERIGO */}
                 <div className="pt-8 space-y-3 pb-20 text-center">
                     <AccountSection />
-                    <button
-                        onClick={profile.provider === 'google' ? disconnectGoogle : connectGoogle}
-                        className="w-full py-5 rounded-3xl font-black uppercase text-xs transition-all border shadow-lg"
-                        style={{
-                            backgroundColor: profile.provider === 'google' ? 'transparent' : (isLight ? '#000' : '#fff'),
-                            color: profile.provider === 'google' ? '#71717a' : (isLight ? '#fff' : '#000'),
-                            borderColor: isLight ? '#e4e4e7' : '#27272a'
-                        }}
-                    >
+                    <button onClick={profile.provider === 'google' ? disconnectGoogle : connectGoogle} className="w-full py-5 rounded-3xl font-black uppercase text-xs transition-all border"
+                        style={{ backgroundColor: profile.provider === 'google' ? 'transparent' : '#fff', color: profile.provider === 'google' ? '#71717a' : '#000' }}>
                         {profile.provider === 'google' ? 'Desconectar Google' : 'Vincular Google'}
                     </button>
-
-                    <button
-                        onClick={deleteAccount}
-                        className="w-full py-4 text-zinc-500 hover:text-red-500 transition-colors font-bold uppercase text-[9px] tracking-widest flex items-center justify-center gap-2"
-                    >
+                    <button onClick={deleteAccount} className="w-full py-4 text-zinc-500 hover:text-red-500 transition-colors font-bold uppercase text-[9px] flex items-center justify-center gap-2">
                         <Trash2 size={12} /> Excluir Conta Permanentemente
                     </button>
                 </div>

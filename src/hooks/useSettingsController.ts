@@ -37,7 +37,7 @@ interface BackupData {
 }
 
 const BACKUP_FILE = 'otaku-library.json'
-const AUTO_SAVE_INTERVAL = 1000 * 60 * 5 // Backup de segurança a cada 5 min
+const AUTO_SAVE_INTERVAL = 1000 * 60 * 5 // 5 min
 
 function isAnimeStatus(status: any): status is AnimeStatus {
     return ['watching', 'completed', 'paused', 'dropped', 'planned'].includes(status)
@@ -55,9 +55,14 @@ export function useProfileController() {
     const resetProfile = useProfileStore((state) => state.resetProfile);
     const toggleDrive = useProfileStore((state) => state.toggleDrive);
 
-    const isToastActive = useRef(false);
+    // --- ESTADOS DE UPDATE (CONECTADOS AO MAIN.TS) ---
+    const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+    const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'latest' | 'downloading' | 'ready'>('idle');
+    const [downloadProgress, setDownloadProgress] = useState(0);
 
+    const isToastActive = useRef(false);
     const { showToast } = useToast();
+
     const {
         animeList,
         mangaList,
@@ -71,6 +76,26 @@ export function useProfileController() {
 
     const [isSaving, setIsSaving] = useState(false)
     const intervalRef = useRef<number | null>(null)
+
+    const checkForUpdates = useCallback(() => {
+        if (isCheckingUpdate) return;
+        setIsCheckingUpdate(true);
+        setUpdateStatus('checking'); // Opcional: um estado visual intermediário
+
+        window.electronAPI?.checkForUpdates();
+
+        // Timeout de segurança caso o Electron não responda
+        setTimeout(() => setIsCheckingUpdate(false), 15000);
+    }, [isCheckingUpdate]);
+
+    const startUpdateDownload = () => {
+        setUpdateStatus('downloading');
+        window.electronAPI?.startDownload();
+    };
+
+    const installUpdate = () => {
+        window.electronAPI?.quitAndInstall();
+    };
 
     // --- TEMAS ---
     const applyTheme = useCallback((theme: UserTheme) => {
@@ -131,112 +156,58 @@ export function useProfileController() {
         theme: { colors: profile.theme, banner: profile.banner }
     }), [animeList, mangaList, coins, xp, inventory, getLatestLocalTimestamp, profile.theme, profile.banner]);
 
-    // --- LOGICA DE RECONEXÃO ---
     const handleTokenExpiration = useCallback((actionType: 'backup' | 'restore') => {
         if (isToastActive.current) return;
-
         const message = actionType === 'backup'
             ? "Sua conexão expirou. Reconecte para salvar seu progresso no Drive."
             : "Sua conexão expirou. Reconecte para baixar seus dados do Drive.";
-
         isToastActive.current = true;
-
-        showToast(
-            message,
-            "error",
-            0, // Duração infinita até interagir
-            "Reconectar Agora",
-            () => {
-                // Ação do Botão: Simples e direta
-                isToastActive.current = false;
-                signInWithGoogle(); // Apenas abre a janela. O resto o App.tsx resolve no callback.
-            }
+        showToast(message, "error", 0, "Reconectar Agora", () => {
+            isToastActive.current = false;
+            signInWithGoogle();
+        }
         );
     }, [showToast]);
 
     // --- GOOGLE DRIVE ---
     const backupNow = useCallback(async (manualToken?: string): Promise<void> => {
         const token = manualToken || profile.accessToken;
-
-        // Se não tem token nenhum, nem tenta
         if (!token || !driveEnabled) return;
-
         try {
             setIsSaving(true);
             await saveFileToDrive(BACKUP_FILE, buildUserData(), token);
-
-            // Sucesso apenas se for clique manual
             if (manualToken) showToast("Backup realizado no Drive!", "success");
         } catch (error: any) {
-            console.error("Erro detectado:", error);
-
-            // Se o Google disser que não está autorizado (401) ou o token for inválido
-            const isUnauthorized =
-                error.status === 401 ||
-                error.message?.includes('401') ||
-                error.message?.includes('invalid_bits') ||
-                error.message === 'TOKEN_EXPIRED';
-
-            if (isUnauthorized) {
-                // Dispara o Toast com botão que NÃO sai sozinho
-                handleTokenExpiration('backup');
-            } else {
-                showToast("Erro ao acessar o Drive.", "error");
-            }
-        } finally {
-            setIsSaving(false);
-        }
+            const isUnauthorized = error.status === 401 || error.message?.includes('401') || error.message === 'TOKEN_EXPIRED';
+            if (isUnauthorized) handleTokenExpiration('backup');
+            else showToast("Erro ao acessar o Drive.", "error");
+        } finally { setIsSaving(false); }
     }, [driveEnabled, profile.accessToken, buildUserData, showToast, handleTokenExpiration]);
 
     const restoreFromDrive = useCallback(async (manualToken?: string): Promise<void> => {
-        const token = manualToken || profile.accessToken
-        if (!token) {
-            showToast("Conecte ao Google primeiro.", "info");
-            return;
-        }
-
+        const token = manualToken || profile.accessToken;
+        if (!token) { showToast("Conecte ao Google primeiro.", "info"); return; }
         try {
             setIsSaving(true);
             const rawData = await loadFileFromDrive(BACKUP_FILE, token);
-
-            if (!rawData) {
-                showToast("Nenhum backup encontrado no Drive.", "info");
-                return;
-            }
-
+            if (!rawData) { showToast("Nenhum backup encontrado no Drive.", "info"); return; }
             const data = rawData as unknown as BackupData;
             resetStore();
-
             data.animes?.forEach(a => addAnime({ ...a, status: isAnimeStatus(a.status) ? a.status : 'planned' }));
             data.mangas?.forEach(m => addManga({ ...m, status: isReadingStatus(m.status) ? m.status : 'planned' }));
-
             if (data.rpg) {
-                useAppStore.setState({
-                    coins: data.rpg.coins || 0,
-                    xp: data.rpg.xp || 0,
-                    inventory: data.rpg.inventory || []
-                });
+                useAppStore.setState({ coins: data.rpg.coins || 0, xp: data.rpg.xp || 0, inventory: data.rpg.inventory || [] });
             }
-
             if (data.theme) {
-                setProfile({
-                    ...profile,
-                    theme: data.theme.colors || profile.theme,
-                    banner: data.theme.banner || undefined
-                });
+                setProfile({ ...profile, theme: data.theme.colors || profile.theme, banner: data.theme.banner || undefined });
             }
-
             showToast("Dados restaurados com sucesso!", "success");
         } catch (error: any) {
-            if (error.message === 'TOKEN_EXPIRED') {
-                handleTokenExpiration('restore');
-            } else {
-                showToast("Erro ao restaurar dados.", "error");
-            }
+            if (error.message === 'TOKEN_EXPIRED') handleTokenExpiration('restore');
+            else showToast("Erro ao restaurar dados.", "error");
         } finally { setIsSaving(false); }
     }, [profile, resetStore, addAnime, addManga, setProfile, showToast, handleTokenExpiration]);
 
-    // --- EXPORT/IMPORT LOCAL ---
     const exportAppDataJson = () => {
         try {
             const blob = new Blob([JSON.stringify(buildUserData(), null, 2)], { type: 'application/json' });
@@ -269,58 +240,96 @@ export function useProfileController() {
         reader.readAsText(file);
     };
 
-    // --- EFEITOS ---
+    // --- EFEITO: ESCUTAR O ELECTRON (UPDATER) ---
     useEffect(() => {
-        applyTheme(profile.theme);
-    }, [profile.theme, applyTheme]);
+        if (!window.electronAPI) return;
 
-    // SALVAMENTO REATIVO (Instantâneo com Debounce de 3s)
+        const removeAvailable = window.electronAPI.onUpdateAvailable((info: any) => {
+            setIsCheckingUpdate(false);
+            setUpdateStatus('available');
+            showToast(`Nova versão ${info?.version || ''} disponível!`, "info");
+        });
+
+        const removeNotAvailable = window.electronAPI.onUpdateNotAvailable(() => {
+            setIsCheckingUpdate(false);
+            setUpdateStatus('latest');
+            showToast("Você já está na versão mais atualizada!", "success");
+        });
+
+        const removeProgress = window.electronAPI.onUpdateProgress((percent: number) => {
+            setUpdateStatus('downloading');
+            setDownloadProgress(Math.round(percent));
+        });
+
+        const removeReady = window.electronAPI.onUpdateReady(() => {
+            setUpdateStatus('ready');
+            showToast("Download concluído! Reinicie para aplicar.", "success");
+        });
+
+        const removeError = window.electronAPI.onUpdateError((err: string) => {
+            setIsCheckingUpdate(false);
+
+            // TRATAMENTO ESPECIAL PARA O ERRO 406 / FEED DO GITHUB
+            // Se ele falhar ao ler o feed, mas você já está na versão da tag (1.0.1),
+            // consideramos que o usuário está atualizado.
+            if (err.includes("406") || err.includes("Unable to find latest version")) {
+                setUpdateStatus('latest');
+                showToast("Você está na versão mais recente!", "success");
+            } else {
+                setUpdateStatus('idle');
+                showToast("Falha ao buscar atualização.", "error");
+            }
+
+            console.error("Update Error:", err);
+        });
+
+        return () => {
+            removeAvailable?.();
+            removeNotAvailable?.();
+            removeProgress?.();
+            removeReady?.();
+            removeError?.();
+        };
+    }, [showToast]);
+
+    // --- EFEITOS DE TEMA E BACKUP ---
+    useEffect(() => { applyTheme(profile.theme); }, [profile.theme, applyTheme]);
+
     useEffect(() => {
         if (driveEnabled && profile.accessToken) {
-            const timer = setTimeout(() => {
-                backupNow();
-            }, 3000);
-
+            const timer = setTimeout(() => backupNow(), 3000);
             return () => clearTimeout(timer);
         }
-        // Monitora listas, rpg e conexão
     }, [animeList, mangaList, coins, xp, inventory, driveEnabled, profile.accessToken, backupNow]);
 
-    // BACKUP DE SEGURANÇA (Intervalo fixo)
     useEffect(() => {
         if (!driveEnabled || !profile.accessToken) return;
-        intervalRef.current = window.setInterval(() => {
-            backupNow().catch(() => { })
-        }, AUTO_SAVE_INTERVAL)
+        intervalRef.current = window.setInterval(() => backupNow().catch(() => { }), AUTO_SAVE_INTERVAL);
         return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
     }, [driveEnabled, profile.accessToken, backupNow])
 
-    useEffect(() => {
-        return () => {
-            isToastActive.current = false;
-        }
-    }, []);
+    useEffect(() => { return () => { isToastActive.current = false; } }, []);
 
     return {
         profile,
         driveEnabled,
         isSaving,
+        // Update System
+        isCheckingUpdate,
+        updateStatus,
+        downloadProgress,
+        checkForUpdates,
+        startUpdateDownload,
+        installUpdate,
+        // Google/Account
         connectGoogle: signInWithGoogle,
         disconnectGoogle: async () => { await signOutGoogle(); resetProfile(); },
         enableDrive: async () => {
-            if (profile.provider !== 'google') {
-                await signInWithGoogle();
-            } else {
-                toggleDrive(!driveEnabled);
-            }
+            if (profile.provider !== 'google') await signInWithGoogle();
+            else toggleDrive(!driveEnabled);
         },
         exportToDrive: () => {
-            if (!profile.accessToken) {
-                
-                handleTokenExpiration('backup');
-                return;
-            }
-
+            if (!profile.accessToken) { handleTokenExpiration('backup'); return; }
             backupNow(profile.accessToken);
         },
         restoreFromDrive: () => restoreFromDrive(profile.accessToken),
@@ -334,9 +343,7 @@ export function useProfileController() {
                 try {
                     if (profile.accessToken) await deleteFileFromDrive(BACKUP_FILE, profile.accessToken);
                     if (profile.provider === 'google') await deleteGoogleAccount();
-                    resetProfile();
-                    resetStore();
-                    localStorage.clear();
+                    resetProfile(); resetStore(); localStorage.clear();
                     showToast("Tudo foi apagado!", "success");
                     setTimeout(() => window.location.reload(), 1000);
                 } catch { showToast("Erro ao limpar dados.", "error"); }

@@ -12,6 +12,7 @@
     "build:api": "ncc build api/source.js -o api",
     "build:electron": "tsc -p tsconfig.electron.json && node -e \"const fs=require('fs'); if(fs.existsSync('dist-electron/main.js')){fs.renameSync('dist-electron/main.js', 'dist-electron/main.cjs')}; if(fs.existsSync('dist-electron/preload.js')){fs.renameSync('dist-electron/preload.js', 'dist-electron/preload.cjs')}\"",
     "build": "npm run clean && npm run build:api && npm run build:web && npm run build:electron && npx electron-builder --win",
+    "ship": "npm version patch && npm run clean && npm run build:api && npm run build:web && npm run build:electron && npx electron-builder --win --publish always",
     "clean": "if exist dist rmdir /s /q dist && if exist dist-electron rmdir /s /q dist-electron && if exist release rmdir /s /q release && if exist api_dist rmdir /s /q api_dist"
   },
   "dependencies": {

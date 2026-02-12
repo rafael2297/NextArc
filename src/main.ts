@@ -7,7 +7,7 @@ const iconPath = path.join(__dirname, 'assets', 'icon.ico');
 
 let mainWindow: BrowserWindow | null = null;
 let apiProcess: ChildProcess | null = null;
-let isQuitting = false; 
+let isQuitting = false;
 
 const CUSTOM_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
@@ -37,6 +37,11 @@ autoUpdater.on('update-downloaded', () => {
 autoUpdater.on('error', (err) => {
     console.error('Erro no updater:', err);
     mainWindow?.webContents.send('update-error', err.message);
+});
+
+autoUpdater.on('update-not-available', () => {
+    // Avisa o front que já estamos na última versão
+    mainWindow?.webContents.send('update-not-available');
 });
 
 /**
@@ -96,7 +101,7 @@ if (process.defaultApp) {
  */
 function createWindow() {
     // Certifique-se que o caminho aponta para o arquivo gerado (JS) após o build do TS
-    const preloadPath = path.join(__dirname, 'preload.js');
+    const preloadPath = path.join(__dirname, 'preload.cjs');
 
     mainWindow = new BrowserWindow({
         width: 1280,
