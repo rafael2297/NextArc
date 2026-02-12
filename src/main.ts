@@ -1,13 +1,13 @@
 import { app, BrowserWindow, shell, ipcMain, session } from 'electron';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { spawn, ChildProcess, exec } from 'node:child_process';
+import { autoUpdater } from 'electron-updater';
 
 const iconPath = path.join(__dirname, 'assets', 'icon.ico');
 
 let mainWindow: BrowserWindow | null = null;
 let apiProcess: ChildProcess | null = null;
-let isQuitting = false; // Flag para controlar o estado de saída
+let isQuitting = false; 
 
 const CUSTOM_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
@@ -15,7 +15,32 @@ app.setName('NesxtArc');
 app.setAppUserModelId('com.nesxtarc.app');
 
 /**
- * BACKEND MANAGEMENT
+ * CONFIGURAÇÕES DO AUTO-UPDATER
+ */
+autoUpdater.autoDownload = false; // Importante: o usuário decide pelo Toast
+autoUpdater.allowPrerelease = false;
+
+// Eventos do Updater enviados para o Front-end
+autoUpdater.on('update-available', (info) => {
+    // Enviamos o objeto 'info' completo para o front (versão, notas, etc)
+    mainWindow?.webContents.send('update-available', info);
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+    mainWindow?.webContents.send('update-progress', progressObj.percent);
+});
+
+autoUpdater.on('update-downloaded', () => {
+    mainWindow?.webContents.send('update-ready');
+});
+
+autoUpdater.on('error', (err) => {
+    console.error('Erro no updater:', err);
+    mainWindow?.webContents.send('update-error', err.message);
+});
+
+/**
+ * GERENCIAMENTO DO BACKEND (API)
  */
 function killBackendAndQuit() {
     if (apiProcess && apiProcess.pid) {
@@ -28,7 +53,7 @@ function killBackendAndQuit() {
         exec(killCommand, () => {
             console.log('API finalizada com sucesso.');
             apiProcess = null;
-            app.quit(); // Encerra o app após a confirmação da morte do processo
+            app.quit();
         });
     } else {
         app.quit();
@@ -56,7 +81,7 @@ function startBackend() {
 }
 
 /**
- * PROTOCOL REGISTRATION
+ * PROTOCOLO CUSTOMIZADO (Deep Linking)
  */
 if (process.defaultApp) {
     if (process.argv.length >= 2) {
@@ -67,10 +92,11 @@ if (process.defaultApp) {
 }
 
 /**
- * WINDOW MANAGEMENT
+ * CRIAÇÃO DA JANELA PRINCIPAL
  */
 function createWindow() {
-    const preloadPath = path.join(__dirname, 'preload.cjs');
+    // Certifique-se que o caminho aponta para o arquivo gerado (JS) após o build do TS
+    const preloadPath = path.join(__dirname, 'preload.js');
 
     mainWindow = new BrowserWindow({
         width: 1280,
@@ -89,12 +115,11 @@ function createWindow() {
         }
     });
 
-    // Intercepta o clique no botão de fechar (X)
     mainWindow.on('close', (event) => {
         if (!isQuitting) {
-            event.preventDefault(); // Impede o fechamento imediato
+            event.preventDefault();
             isQuitting = true;
-            if (mainWindow) mainWindow.hide(); // Esconde para dar feedback de fechamento ao usuário
+            if (mainWindow) mainWindow.hide();
             killBackendAndQuit();
         }
     });
@@ -135,7 +160,7 @@ function createWindow() {
 }
 
 /**
- * IPC EVENTS
+ * EVENTOS IPC (Comunicação Front-End)
  */
 ipcMain.on('open-google-login', () => {
     const clientId = "637162798817-kounta0g5pn28c67ht16qsod9eihgh9p.apps.googleusercontent.com";
@@ -158,8 +183,21 @@ ipcMain.on('open-google-login', () => {
     shell.openExternal(authUrl);
 });
 
+// Canais de atualização chamados pelo Toast
+ipcMain.on('check-for-updates', () => {
+    autoUpdater.checkForUpdatesAndNotify();
+});
+
+ipcMain.on('start-download', () => {
+    autoUpdater.downloadUpdate();
+});
+
+ipcMain.on('quit-and-install', () => {
+    autoUpdater.quitAndInstall();
+});
+
 /**
- * LIFECYCLE & PROTOCOL HANDLING
+ * CICLO DE VIDA DO APLICATIVO
  */
 const gotTheLock = app.requestSingleInstanceLock();
 
@@ -183,16 +221,16 @@ if (!gotTheLock) {
         startBackend();
         createWindow();
 
-        const url = process.argv.find(arg => arg.startsWith('nesxtarc://'));
-        if (url && mainWindow) {
-            const currentWindow = mainWindow;
-            currentWindow.webContents.on('did-finish-load', () => {
-                currentWindow.webContents.send('auth-callback', url);
-            });
+        // Checar atualização automaticamente ao iniciar em produção
+        if (app.isPackaged) {
+            setTimeout(() => {
+                autoUpdater.checkForUpdatesAndNotify();
+            }, 5000); // 5 segundos após abrir para não sobrecarregar o início
         }
     });
 }
 
+// Handler para macOS (Deep Link)
 app.on('open-url', (event, url) => {
     event.preventDefault();
     if (url.startsWith('nesxtarc://')) {
@@ -200,31 +238,14 @@ app.on('open-url', (event, url) => {
             mainWindow.webContents.send('auth-callback', url);
         } else {
             createWindow();
-            const checkWindow = setInterval(() => {
-                if (mainWindow) {
-                    const win = mainWindow;
-                    win.webContents.once('did-finish-load', () => {
-                        win.webContents.send('auth-callback', url);
-                    });
-                    clearInterval(checkWindow);
-                }
-            }, 100);
-            setTimeout(() => clearInterval(checkWindow), 5000);
         }
     }
 });
 
-// Garante que o processo não feche antes da API ser morta
 app.on('before-quit', (event) => {
     if (apiProcess && !isQuitting) {
         event.preventDefault();
         isQuitting = true;
         killBackendAndQuit();
-    }
-});
-
-app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
-        // No Windows/Linux, o app.quit() é chamado dentro do killBackendAndQuit
     }
 });

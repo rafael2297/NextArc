@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { HashRouter, Routes, Route } from 'react-router-dom'
+import { DownloadCloud, CheckCircle2 } from 'lucide-react'
 
 // COMPONENTES E LAYOUT
 import Layout from './components/layout/Layout'
 import { ToastContainer } from './components/toast/ToastContainer'
+import { useToast } from './components/toast/useToast'
 import ThemeHandler from './components/ThemeHandler'
 import RequireAccess from './components/RequireAccess'
 
@@ -31,8 +33,8 @@ import { initDriveSync, restoreFromDrive } from './services/driveSync'
 
 export default function App() {
   const [isLoaded, setIsLoaded] = useState(false)
+  const { showToast } = useToast()
 
-  // Importamos o controller para usar a lógica de verificação
   const { exportToDrive } = useProfileController()
 
   // 1. CARREGAMENTO INICIAL
@@ -52,28 +54,57 @@ export default function App() {
     initApp()
   }, [])
 
-  // 2. VERIFICAÇÃO AUTOMÁTICA DO TOKEN (AO ABRIR)
+  // 2. VERIFICAÇÃO AUTOMÁTICA DO TOKEN E UPDATES
   useEffect(() => {
     if (isLoaded) {
+      // --- LÓGICA DO TOKEN GOOGLE DRIVE ---
       const state = useProfileStore.getState()
       const driveEnabled = state.driveEnabled
       const accessToken = state.profile?.accessToken
-
-      // Verifica se o token é inválido ou um link de erro
       const isTokenInvalid = !accessToken || accessToken.includes('nesxtarc://')
 
       if (driveEnabled && isTokenInvalid) {
-        // Delay de 1s para o ToastContainer estar pronto na tela
-        const timer = setTimeout(() => {
-          exportToDrive()
-        }, 1000)
-        return () => clearTimeout(timer)
+        setTimeout(() => exportToDrive(), 1000)
       }
 
-      // Se estiver tudo OK, inicia os serviços normais
       if (accessToken && !isTokenInvalid) {
         initAuthListener()
         restoreFromDrive().finally(() => initDriveSync())
+      }
+
+      // --- LÓGICA DE ATUALIZAÇÃO DO APP NO App.tsx ---
+      if ((window as any).electronAPI) {
+
+        const unsubscribeUpdate = (window as any).electronAPI.onUpdateAvailable((info: any) => {
+          showToast({
+            title: "Nova Atualização!",
+            message: `A versão ${info.version} está disponível.`,
+            type: 'info',
+            duration: 15000,
+            action: {
+              label: "ATUALIZAR",
+              onClick: () => (window as any).electronAPI.downloadUpdate()
+            }
+          })
+        })
+
+        const unsubscribeReady = (window as any).electronAPI.onUpdateReady(() => {
+          showToast({
+            title: "Pronto para Instalar!",
+            message: "Reinicie o app para aplicar a atualização.",
+            type: 'success',
+            duration: 0, // Mantém aberto
+            action: {
+              label: "REINICIAR",
+              onClick: () => (window as any).electronAPI.quitAndInstall()
+            }
+          })
+        })
+
+        return () => {
+          if (unsubscribeUpdate) unsubscribeUpdate()
+          if (unsubscribeReady) unsubscribeReady()
+        }
       }
     }
   }, [isLoaded])

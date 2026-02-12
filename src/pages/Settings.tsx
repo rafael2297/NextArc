@@ -76,17 +76,14 @@ export default function Settings() {
 
     // Função aprimorada para Backup Manual
     const handleManualBackup = async () => {
-        // Se estiver salvando, não faz nada
         if (isSaving) return;
 
-        // Se o token estiver inválido, abre o Google direto
         if (isTokenInvalid) {
             console.log("Sessão expirada, abrindo Google Auth direto...");
-            await connectGoogle(); // Chama a função que abre o login (signInWithGoogle)
+            await connectGoogle();
             return;
         }
 
-        // Se o token estiver OK, faz o backup normal
         try {
             await exportToDrive();
         } catch (err) {
@@ -299,8 +296,7 @@ export default function Settings() {
                     <div className="border-t pt-4" style={{ borderColor: isLight ? '#f4f4f5' : 'rgba(255,255,255,0.05)' }}>
                         <button onClick={() => setIsAdvancedOpen(!isAdvancedOpen)} className="w-full flex items-center justify-between px-2 py-2">
                             <div className="flex items-center gap-3">
-                                <Settings2 size={14} className="text-zinc-500" />
-                                <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Ajuste Manual de Cores</span>
+                                <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Ajuste Manual</span>
                             </div>
                             <motion.div animate={{ rotate: isAdvancedOpen ? 180 : 0 }}>
                                 <ChevronDown size={16} className="text-zinc-500" />
@@ -312,19 +308,18 @@ export default function Settings() {
                                 <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
                                     <div className="space-y-3 pt-4 px-2">
                                         {[
-                                            { label: 'Cor de Fundo', key: 'background' as const },
-                                            { label: 'Cor dos Menus', key: 'navbar' as const },
-                                            { label: 'Cor de Destaque', key: 'primary' as const },
+                                            { label: 'Fundo', key: 'background' as const },
+                                            { label: 'Menus', key: 'navbar' as const },
+                                            { label: 'Destaque', key: 'primary' as const },
                                         ].map((item) => (
                                             <div key={item.key} className="flex items-center justify-between p-3 rounded-xl border"
                                                 style={{
                                                     backgroundColor: isLight ? '#fafafa' : 'rgba(0,0,0,0.2)',
                                                     borderColor: isLight ? '#f4f4f5' : 'rgba(255,255,255,0.05)'
                                                 }}>
-                                                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-tight">{item.label}</span>
+                                                <span className="text-[10px] font-bold text-zinc-400 uppercase">{item.label}</span>
                                                 <label className="relative cursor-pointer flex items-center gap-3">
-                                                    <div className="w-6 h-6 rounded-lg border border-white/10 shadow-lg" style={{ backgroundColor: currentTheme[item.key] }} />
-                                                    <Pipette size={14} className="text-zinc-500" />
+                                                    <div className="w-6 h-6 rounded-lg border border-white/10" style={{ backgroundColor: currentTheme[item.key] }} />
                                                     <input type="color" value={currentTheme[item.key]} onChange={(e) => updateSpecificColor(item.key, e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
                                                 </label>
                                             </div>
@@ -344,7 +339,7 @@ export default function Settings() {
                     }}>
                     <div className="flex items-center gap-3 mb-6 px-2">
                         <EyeOff size={18} className="text-rose-500" />
-                        <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em]">Privacidade (NSFW)</h3>
+                        <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em]">Conteúdo Sensível</h3>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                         {['hide', 'blur', 'show'].map((mode) => (
@@ -377,15 +372,15 @@ export default function Settings() {
                             <Database size={20} style={{ color: isTokenInvalid ? '#f59e0b' : currentTheme.primary }} />
                             <div>
                                 <h3 className="text-xs font-black uppercase tracking-tight" style={{ color: isLight ? '#000' : '#fff' }}>Google Drive</h3>
-                                <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-tighter">
-                                    {isTokenInvalid ? 'Sessão Expirada' : 'Backup Automático em Nuvem'}
+                                <p className="text-[9px] text-zinc-500 font-bold uppercase">
+                                    {isTokenInvalid ? 'Sessão Expirada' : 'Backup em Nuvem'}
                                 </p>
                             </div>
                         </div>
                         <button
                             onClick={enableDrive}
                             disabled={isSaving}
-                            className="w-12 h-6 rounded-full relative transition-all shadow-lg disabled:opacity-50"
+                            className="w-12 h-6 rounded-full relative transition-all"
                             style={{ backgroundColor: driveEnabled ? currentTheme.primary : (isLight ? '#e4e4e7' : '#27272a') }}
                         >
                             <motion.div animate={{ x: driveEnabled ? 26 : 4 }} className="absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm" />
@@ -403,15 +398,15 @@ export default function Settings() {
                                 {isTokenInvalid && (
                                     <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-3 mb-2">
                                         <AlertCircle size={16} className="text-amber-500 shrink-0" />
-                                        <p className="text-[9px] font-bold text-amber-500 uppercase leading-tight">Sua sessão expirou. Clique em Backup para reconectar com segurança.</p>
+                                        <p className="text-[9px] font-bold text-amber-500 uppercase leading-tight">Sua sessão expirou. Reconecte para salvar.</p>
                                     </div>
                                 )}
 
                                 <div className="grid grid-cols-2 gap-2">
                                     <button
-                                        onClick={handleManualBackup} // <-- Ele vai disparar a lógica acima
+                                        onClick={handleManualBackup}
                                         disabled={isSaving}
-                                        className="py-4 rounded-2xl flex items-center justify-center gap-2 border border-dashed transition-all active:scale-95 disabled:grayscale"
+                                        className="py-4 rounded-2xl flex items-center justify-center gap-2 border border-dashed transition-all active:scale-95"
                                         style={{
                                             borderColor: isTokenInvalid ? '#f59e0b' : currentTheme.primary,
                                             color: isTokenInvalid ? '#f59e0b' : currentTheme.primary,
@@ -419,20 +414,18 @@ export default function Settings() {
                                         }}
                                     >
                                         <CloudUpload size={16} className={isSaving ? 'animate-bounce' : ''} />
-                                        <span className="text-[10px] font-black uppercase tracking-widest">
-                                            {isSaving ? 'Salvando...' : isTokenInvalid ? 'Reconectar & Salvar' : 'Backup Agora'}
+                                        <span className="text-[10px] font-black uppercase">
+                                            {isSaving ? 'Salvando...' : isTokenInvalid ? 'Reconectar' : 'Backup Agora'}
                                         </span>
                                     </button>
 
                                     <button
                                         onClick={() => restoreFromDrive()}
                                         disabled={isSaving}
-                                        className="py-4 rounded-2xl flex items-center justify-center gap-2 border border-dashed transition-all active:scale-95 disabled:opacity-50 text-zinc-500 border-zinc-500/30 bg-zinc-500/5"
+                                        className="py-4 rounded-2xl flex items-center justify-center gap-2 border border-dashed transition-all active:scale-95 text-zinc-500 border-zinc-500/30 bg-zinc-500/5"
                                     >
                                         <RefreshCw size={16} className={isSaving ? 'animate-spin' : ''} />
-                                        <span className="text-[10px] font-black uppercase tracking-widest">
-                                            {isSaving ? 'Baixando...' : 'Restaurar'}
-                                        </span>
+                                        <span className="text-[10px] font-black uppercase">Restaurar</span>
                                     </button>
                                 </div>
                             </motion.div>
@@ -440,8 +433,8 @@ export default function Settings() {
                     </AnimatePresence>
 
                     <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/5">
-                        <button onClick={exportProfileJson} className="py-4 rounded-2xl font-black text-[9px] uppercase tracking-widest transition-all" style={{ backgroundColor: isLight ? '#f4f4f5' : '#27272a', color: isLight ? '#000' : '#fff' }}>Exportar JSON</button>
-                        <button onClick={() => fileInputRef.current?.click()} className="py-4 rounded-2xl font-black text-[9px] uppercase tracking-widest transition-all" style={{ backgroundColor: isLight ? '#f4f4f5' : '#27272a', color: isLight ? '#000' : '#fff' }}>Importar JSON</button>
+                        <button onClick={exportProfileJson} className="py-4 rounded-2xl font-black text-[9px] uppercase transition-all" style={{ backgroundColor: isLight ? '#f4f4f5' : '#27272a', color: isLight ? '#000' : '#fff' }}>Exportar JSON</button>
+                        <button onClick={() => fileInputRef.current?.click()} className="py-4 rounded-2xl font-black text-[9px] uppercase transition-all" style={{ backgroundColor: isLight ? '#f4f4f5' : '#27272a', color: isLight ? '#000' : '#fff' }}>Importar JSON</button>
                     </div>
                 </section>
 
@@ -450,14 +443,14 @@ export default function Settings() {
                     <AccountSection />
                     <button
                         onClick={profile.provider === 'google' ? disconnectGoogle : connectGoogle}
-                        className="w-full py-5 rounded-3xl font-black uppercase tracking-widest text-xs transition-all border shadow-lg"
+                        className="w-full py-5 rounded-3xl font-black uppercase text-xs transition-all border shadow-lg"
                         style={{
                             backgroundColor: profile.provider === 'google' ? 'transparent' : (isLight ? '#000' : '#fff'),
                             color: profile.provider === 'google' ? '#71717a' : (isLight ? '#fff' : '#000'),
                             borderColor: isLight ? '#e4e4e7' : '#27272a'
                         }}
                     >
-                        {profile.provider === 'google' ? 'Desconectar Conta Google' : 'Vincular com Google'}
+                        {profile.provider === 'google' ? 'Desconectar Google' : 'Vincular Google'}
                     </button>
 
                     <button
