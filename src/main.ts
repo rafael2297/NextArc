@@ -51,15 +51,23 @@ function killBackendAndQuit() {
     if (apiProcess && apiProcess.pid) {
         console.log('Finalizando API antes de sair...');
 
-        const killCommand = process.platform === 'win32'
-            ? `taskkill /pid ${apiProcess.pid} /T /F`
-            : `kill -9 ${apiProcess.pid}`;
-
-        exec(killCommand, () => {
-            console.log('API finalizada com sucesso.');
+        // No Windows, usamos o taskkill. No Linux/Mac, o apiProcess.kill() costuma bastar.
+        if (process.platform === 'win32') {
+            try {
+                // Usamos execSync ou spawnSync para garantir que o Node espere o comando terminar
+                exec(`taskkill /pid ${apiProcess.pid} /T /F`, (err) => {
+                    if (err) console.error('Erro ao matar processo:', err);
+                    apiProcess = null;
+                    app.quit();
+                });
+            } catch (e) {
+                app.quit();
+            }
+        } else {
+            apiProcess.kill('SIGKILL');
             apiProcess = null;
             app.quit();
-        });
+        }
     } else {
         app.quit();
     }
@@ -122,9 +130,14 @@ function createWindow() {
 
     mainWindow.on('close', (event) => {
         if (!isQuitting) {
-            event.preventDefault();
+            event.preventDefault(); 
             isQuitting = true;
-            if (mainWindow) mainWindow.hide();
+
+            
+            if (mainWindow) {
+                mainWindow.hide();
+            }
+
             killBackendAndQuit();
         }
     });
@@ -252,5 +265,14 @@ app.on('before-quit', (event) => {
         event.preventDefault();
         isQuitting = true;
         killBackendAndQuit();
+    }
+});
+
+app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+        if (!isQuitting) {
+            isQuitting = true;
+            killBackendAndQuit();
+        }
     }
 });
