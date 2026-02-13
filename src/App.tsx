@@ -75,7 +75,11 @@ export default function App() {
       // --- LÓGICA DE ATUALIZAÇÃO DO APP NO App.tsx ---
       if ((window as any).electronAPI) {
 
+        // 1. Toast de "Nova Atualização" (AZUL/INFO)
         const unsubscribeUpdate = (window as any).electronAPI.onUpdateAvailable((info: any) => {
+          // Mantemos o bloqueio aqui para não aparecer o Toast azul em cima do botão de "Baixar"
+          if (window.location.hash.includes('settings')) return;
+
           showToast({
             title: "Nova Atualização!",
             message: `A versão ${info.version} está disponível.`,
@@ -83,28 +87,30 @@ export default function App() {
             duration: 15000,
             action: {
               label: "ATUALIZAR",
-              onClick: () => (window as any).electronAPI.downloadUpdate()
+              onClick: () => { window.location.hash = '#/settings'; }
             }
-          })
-        })
+          });
+        });
 
         const unsubscribeReady = (window as any).electronAPI.onUpdateReady(() => {
+          // REMOVEMOS o "if settings return" daqui. 
+          // Assim, o Toast verde aparecerá em QUALQUER página, inclusive Settings.
           showToast({
             title: "Pronto para Instalar!",
             message: "Reinicie o app para aplicar a atualização.",
-            type: 'success',
-            duration: 0, // Mantém aberto
+            type: 'success', // Toast Verde
+            duration: 0,
             action: {
               label: "REINICIAR",
               onClick: () => (window as any).electronAPI.quitAndInstall()
             }
-          })
-        })
+          });
+        });
 
         return () => {
-          if (unsubscribeUpdate) unsubscribeUpdate()
-          if (unsubscribeReady) unsubscribeReady()
-        }
+          if (unsubscribeUpdate) unsubscribeUpdate();
+          if (unsubscribeReady) unsubscribeReady();
+        };
       }
     }
   }, [isLoaded])

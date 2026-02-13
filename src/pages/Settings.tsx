@@ -21,7 +21,7 @@ import {
     DownloadCloud
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { AccountSection } from '../components/profile/AccountSection'
@@ -64,6 +64,30 @@ export default function Settings() {
         installUpdate
     } = useProfileController()
 
+
+    const [version, setVersion] = useState("...");
+    useEffect(() => {
+        const fetchVersion = async () => {
+            if (window.electronAPI?.getAppVersion) {
+                const v = await window.electronAPI.getAppVersion();
+                setVersion(v);
+            }
+        };
+        fetchVersion();
+    }, []);
+
+    const handleManualCheck = () => {
+        // Se já sabemos que tem update, apenas baixa
+        if (updateStatus === 'available') {
+            window.electronAPI.startDownload();
+        } else {
+            // Se não sabemos, verifica. 
+            // No main.ts, o autoUpdater.checkForUpdatesAndNotify() disparará o evento 'update-available'
+            window.electronAPI.checkForUpdates();
+        }
+    };
+
+
     const { nsfwMode, setNSFWMode } = useSessionStore()
 
     const isTokenInvalid = !profile.accessToken || profile.accessToken.includes('nesxtarc://');
@@ -92,6 +116,8 @@ export default function Settings() {
         { label: 'Completos', value: (animeList?.filter(a => a.status === 'completed').length || 0) + (mangaList?.filter(m => m.status === 'completed').length || 0), icon: CheckCircle2 },
         { label: 'Lendo Mangá', value: mangaList?.filter(m => m.status === 'reading').length || 0, icon: BookOpen },
     ]
+
+
 
     return (
         <motion.div
@@ -245,15 +271,15 @@ export default function Settings() {
                             <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em]">Software</h3>
                         </div>
                         <span className="text-[9px] font-bold px-3 py-1 rounded-full bg-zinc-500/10 text-zinc-500">
-                            v{profile?.version || "1.0.1"}
+                            v{version}
                         </span>
                     </div>
 
-                    {/* Botão de Update Inteligente */}
+                    {/* Botão de Update Otimizado */}
                     <button
                         onClick={() => {
-                            if (updateStatus === 'available') startUpdateDownload();
-                            else if (updateStatus === 'ready') installUpdate();
+                            if (updateStatus === 'ready') installUpdate();
+                            else if (updateStatus === 'available') startUpdateDownload(); // Inicia o download manual
                             else checkForUpdates();
                         }}
                         disabled={isCheckingUpdate || updateStatus === 'downloading'}
@@ -261,8 +287,10 @@ export default function Settings() {
                     >
                         <div className="relative z-10 py-4 rounded-2xl flex items-center justify-center gap-3 border transition-all"
                             style={{
-                                backgroundColor: isLight ? '#f4f4f5' : '#09090b',
-                                borderColor: (isCheckingUpdate || updateStatus === 'downloading') ? currentTheme.primary : (isLight ? '#e4e4e7' : '#27272a')
+                                // MUDANÇA: Se estiver pronto, o fundo fica verde
+                                backgroundColor: updateStatus === 'ready' ? 'rgba(34, 197, 94, 0.1)' : (isLight ? '#f4f4f5' : '#09090b'),
+                                borderColor: updateStatus === 'ready' ? '#22c55e' : (isCheckingUpdate ? currentTheme.primary : (isLight ? '#e4e4e7' : '#27272a')),
+                                color: updateStatus === 'ready' ? '#22c55e' : 'inherit'
                             }}>
 
                             {isCheckingUpdate || updateStatus === 'downloading' ? (
@@ -270,7 +298,9 @@ export default function Settings() {
                                     <RefreshCw size={18} style={{ color: currentTheme.primary }} />
                                 </motion.div>
                             ) : updateStatus === 'ready' ? (
-                                <Rocket size={18} className="text-green-500" />
+                                <CheckCircle2 size={18} className="text-green-500 animate-bounce" />
+                            ) : updateStatus === 'available' ? (
+                                <DownloadCloud size={18} className="animate-pulse" style={{ color: currentTheme.primary }} />
                             ) : (
                                 <DownloadCloud size={18} style={{ color: currentTheme.primary }} />
                             )}
@@ -279,12 +309,12 @@ export default function Settings() {
                                 {isCheckingUpdate ? 'Verificando...' :
                                     updateStatus === 'available' ? 'Baixar Atualização' :
                                         updateStatus === 'downloading' ? `Baixando ${downloadProgress}%` :
-                                            updateStatus === 'ready' ? 'Reiniciar agora' :
-                                                updateStatus === 'latest' ? 'Versão mais recente' : 'Verificar Atualizações'}
+                                            updateStatus === 'ready' ? 'Instalar e Reiniciar Agora' :
+                                                updateStatus === 'latest' ? 'Você está na versão mais recente' : 'Verificar Atualizações'}
                             </span>
                         </div>
 
-                        {/* Barra de Progresso Real */}
+                        {/* Barra de progresso visível no fundo do botão */}
                         {updateStatus === 'downloading' && (
                             <motion.div
                                 className="absolute bottom-0 left-0 h-1 bg-blue-500 z-20"
@@ -293,6 +323,17 @@ export default function Settings() {
                             />
                         )}
                     </button>
+
+                    {/* Mensagem de sucesso extra se estiver pronto */}
+                    {updateStatus === 'ready' && (
+                        <motion.p
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="text-center text-[9px] font-bold text-green-500 uppercase mt-3 tracking-tighter"
+                        >
+                            Download concluído com sucesso!
+                        </motion.p>
+                    )}
                 </section>
 
                 {/* PRIVACIDADE */}
@@ -336,12 +377,24 @@ export default function Settings() {
 
                     {driveEnabled && (
                         <div className="grid grid-cols-2 gap-2">
-                            <button onClick={exportToDrive} disabled={isSaving} className="py-4 rounded-2xl border border-dashed flex items-center justify-center gap-2 text-[10px] font-black uppercase"
-                                style={{ borderColor: currentTheme.primary, color: currentTheme.primary }}>
-                                <CloudUpload size={16} className={isSaving ? 'animate-bounce' : ''} /> {isSaving ? '...' : 'Backup'}
+                            <button
+                                onClick={exportToDrive}
+                                disabled={isSaving}
+                                className="h-14 rounded-2xl border border-dashed flex items-center justify-center gap-2 text-[10px] font-black uppercase transition-all active:scale-95 disabled:opacity-50"
+                                style={{ borderColor: currentTheme.primary, color: currentTheme.primary }}
+                            >
+                                <CloudUpload size={16} className={isSaving ? 'animate-bounce' : ''} />
+                                <span>{isSaving ? 'Salvando...' : 'Backup'}</span>
                             </button>
-                            <button onClick={restoreFromDrive} className="py-4 rounded-2xl border border-dashed border-zinc-500/30 text-zinc-500 text-[10px] font-black uppercase">
-                                <RefreshCw size={16} /> Restaurar
+
+                            <button
+                                onClick={restoreFromDrive}
+                                disabled={isSaving}
+                                className="h-14 rounded-2xl border border-dashed border-zinc-500/30 text-zinc-500 text-[10px] font-black uppercase flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+                                style={{ backgroundColor: isLight ? 'rgba(0,0,0,0.02)' : 'rgba(255,255,255,0.02)' }}
+                            >
+                                <RefreshCw size={16} className={isSaving ? 'animate-spin' : ''} />
+                                <span>Restaurar</span>
                             </button>
                         </div>
                     )}
@@ -367,3 +420,4 @@ export default function Settings() {
         </motion.div>
     )
 }
+

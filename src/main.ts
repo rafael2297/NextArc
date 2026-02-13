@@ -195,7 +195,7 @@ ipcMain.on('open-google-login', () => {
 });
 
 ipcMain.on('check-for-updates', () => {
-    autoUpdater.checkForUpdatesAndNotify();
+    autoUpdater.checkForUpdates();
 });
 
 ipcMain.on('start-download', () => {
@@ -204,6 +204,10 @@ ipcMain.on('start-download', () => {
 
 ipcMain.on('quit-and-install', () => {
     autoUpdater.quitAndInstall();
+});
+
+ipcMain.handle('get-app-version', () => {
+    return app.getVersion(); 
 });
 
 /**

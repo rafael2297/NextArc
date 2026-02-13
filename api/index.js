@@ -88190,8 +88190,14 @@ async function extractVideo(pageUrl) {
             if (match) playerUrl = match[1];
         }
 
-        if (playerUrl && playerUrl.startsWith('//')) {
-            playerUrl = 'https:' + playerUrl;
+        if (playerUrl) {
+            try {
+                // O construtor URL resolve automaticamente protocolos relativos e valida a string
+                const finalUrl = new URL(playerUrl, 'https://animesonlinecc.to');
+                playerUrl = finalUrl.href;
+            } catch (e) {
+                console.error("[AnimesOnline] URL de player inválida");
+            }
         }
 
         console.log(`[AnimesOnline] 🎬 Player encontrado: ${playerUrl}`);

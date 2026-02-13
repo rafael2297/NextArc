@@ -247,39 +247,34 @@ export function useProfileController() {
         const removeAvailable = window.electronAPI.onUpdateAvailable((info: any) => {
             setIsCheckingUpdate(false);
             setUpdateStatus('available');
-            showToast(`Nova versão ${info?.version || ''} disponível!`, "info");
         });
 
         const removeNotAvailable = window.electronAPI.onUpdateNotAvailable(() => {
             setIsCheckingUpdate(false);
             setUpdateStatus('latest');
+
             showToast("Você já está na versão mais atualizada!", "success");
         });
 
         const removeProgress = window.electronAPI.onUpdateProgress((percent: number) => {
-            setUpdateStatus('downloading');
+
+            setUpdateStatus(prev => prev !== 'downloading' ? 'downloading' : prev);
             setDownloadProgress(Math.round(percent));
         });
 
         const removeReady = window.electronAPI.onUpdateReady(() => {
             setUpdateStatus('ready');
-            showToast("Download concluído! Reinicie para aplicar.", "success");
+
         });
 
         const removeError = window.electronAPI.onUpdateError((err: string) => {
             setIsCheckingUpdate(false);
-
-            // TRATAMENTO ESPECIAL PARA O ERRO 406 / FEED DO GITHUB
-            // Se ele falhar ao ler o feed, mas você já está na versão da tag (1.0.1),
-            // consideramos que o usuário está atualizado.
             if (err.includes("406") || err.includes("Unable to find latest version")) {
                 setUpdateStatus('latest');
-                showToast("Você está na versão mais recente!", "success");
             } else {
                 setUpdateStatus('idle');
                 showToast("Falha ao buscar atualização.", "error");
             }
-
             console.error("Update Error:", err);
         });
 
@@ -293,7 +288,9 @@ export function useProfileController() {
     }, [showToast]);
 
     // --- EFEITOS DE TEMA E BACKUP ---
-    useEffect(() => { applyTheme(profile.theme); }, [profile.theme, applyTheme]);
+    useEffect(() => {
+        applyTheme(profile.theme);
+    }, [profile.theme, applyTheme]);
 
     useEffect(() => {
         if (driveEnabled && profile.accessToken) {
@@ -306,10 +303,10 @@ export function useProfileController() {
         if (!driveEnabled || !profile.accessToken) return;
         intervalRef.current = window.setInterval(() => backupNow().catch(() => { }), AUTO_SAVE_INTERVAL);
         return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
-    }, [driveEnabled, profile.accessToken, backupNow])
+    }, [driveEnabled, profile.accessToken, backupNow]);
 
+    // Limpeza final do Toast
     useEffect(() => { return () => { isToastActive.current = false; } }, []);
-
     return {
         profile,
         driveEnabled,
