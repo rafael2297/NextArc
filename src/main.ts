@@ -11,18 +11,16 @@ let isQuitting = false;
 
 const CUSTOM_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
-app.setName('NesxtArc');
-app.setAppUserModelId('com.nesxtarc.app');
+app.setName('NextArc');
+app.setAppUserModelId('com.nextarc.app');
 
 /**
  * CONFIGURAÇÕES DO AUTO-UPDATER
  */
-autoUpdater.autoDownload = false; // Importante: o usuário decide pelo Toast
+autoUpdater.autoDownload = false;
 autoUpdater.allowPrerelease = false;
 
-// Eventos do Updater enviados para o Front-end
 autoUpdater.on('update-available', (info) => {
-    // Enviamos o objeto 'info' completo para o front (versão, notas, etc)
     mainWindow?.webContents.send('update-available', info);
 });
 
@@ -40,29 +38,24 @@ autoUpdater.on('error', (err) => {
 });
 
 autoUpdater.on('update-not-available', () => {
-    // Avisa o front que já estamos na última versão
     mainWindow?.webContents.send('update-not-available');
 });
 
 /**
  * GERENCIAMENTO DO BACKEND (API)
  */
+// --- ALTERADO: Função de fechamento mais robusta ---
 function killBackendAndQuit() {
     if (apiProcess && apiProcess.pid) {
-        console.log('Finalizando API antes de sair...');
+        console.log(`Finalizando API (PID: ${apiProcess.pid})...`);
 
-        // No Windows, usamos o taskkill. No Linux/Mac, o apiProcess.kill() costuma bastar.
         if (process.platform === 'win32') {
-            try {
-                // Usamos execSync ou spawnSync para garantir que o Node espere o comando terminar
-                exec(`taskkill /pid ${apiProcess.pid} /T /F`, (err) => {
-                    if (err) console.error('Erro ao matar processo:', err);
-                    apiProcess = null;
-                    app.quit();
-                });
-            } catch (e) {
-                app.quit();
-            }
+            // Mata a árvore de processos de forma forçada (/F /T)
+            exec(`taskkill /pid ${apiProcess.pid} /T /F`, (err) => {
+                if (err) console.error('Erro ao matar processo:', err);
+                apiProcess = null;
+                process.exit(0); // Força a saída do Electron após matar a API
+            });
         } else {
             apiProcess.kill('SIGKILL');
             apiProcess = null;
@@ -89,8 +82,23 @@ function startBackend() {
         }
     });
 
-    apiProcess.stdout?.on('data', (data) => console.log(`[API]: ${data}`));
-    apiProcess.stderr?.on('data', (data) => console.error(`[API Error]: ${data}`));
+    // --- CORREÇÃO NO MAIN.TS ---
+    apiProcess.stdout?.on('data', (data) => {
+        const msg = data.toString().trim();
+        console.log(`[API]: ${msg}`);
+
+        // Usamos JSON.stringify para transformar a mensagem em uma string segura para o JS
+        const safeMsg = JSON.stringify(`[API LOG]: ${msg}`);
+        mainWindow?.webContents.executeJavaScript(`console.log(${safeMsg})`).catch(() => { });
+    });
+
+    apiProcess.stderr?.on('data', (data) => {
+        const msg = data.toString().trim();
+        console.error(`[API Error]: ${msg}`);
+
+        const safeMsg = JSON.stringify(`[API ERROR]: ${msg}`);
+        mainWindow?.webContents.executeJavaScript(`console.error(${safeMsg})`).catch(() => { });
+    });
 }
 
 /**
@@ -98,17 +106,16 @@ function startBackend() {
  */
 if (process.defaultApp) {
     if (process.argv.length >= 2) {
-        app.setAsDefaultProtocolClient('nesxtarc', process.execPath, [path.resolve(process.argv[1])]);
+        app.setAsDefaultProtocolClient('nextarc', process.execPath, [path.resolve(process.argv[1])]);
     }
 } else {
-    app.setAsDefaultProtocolClient('nesxtarc');
+    app.setAsDefaultProtocolClient('nextarc');
 }
 
 /**
  * CRIAÇÃO DA JANELA PRINCIPAL
  */
 function createWindow() {
-    // Certifique-se que o caminho aponta para o arquivo gerado (JS) após o build do TS
     const preloadPath = path.join(__dirname, 'preload.cjs');
 
     mainWindow = new BrowserWindow({
@@ -124,24 +131,21 @@ function createWindow() {
             contextIsolation: true,
             sandbox: false,
             preload: preloadPath,
-            partition: 'persist:nesxtarc-data',
+            partition: 'persist:nextarc-data',
         }
     });
 
+    // --- ALTERADO: Melhoria no fechamento ---
     mainWindow.on('close', (event) => {
         if (!isQuitting) {
-            event.preventDefault(); 
+            event.preventDefault();
             isQuitting = true;
-
-            
-            if (mainWindow) {
-                mainWindow.hide();
-            }
-
+            if (mainWindow) mainWindow.hide();
             killBackendAndQuit();
         }
     });
 
+    // Atalho para DevTools
     mainWindow.webContents.on('before-input-event', (event, input) => {
         if (input.control && input.shift && input.key.toLowerCase() === 'i') {
             mainWindow?.webContents.openDevTools();
@@ -178,30 +182,18 @@ function createWindow() {
 }
 
 /**
- * EVENTOS IPC (Comunicação Front-End)
+ * EVENTOS IPC
  */
 ipcMain.on('open-google-login', () => {
     const clientId = "637162798817-kounta0g5pn28c67ht16qsod9eihgh9p.apps.googleusercontent.com";
     const redirectUri = "https://site-anime-e5395.web.app/success.html";
-    const scopes = [
-        "openid",
-        "email",
-        "profile",
-        "https://www.googleapis.com/auth/drive.file",
-        "https://www.googleapis.com/auth/drive.appdata"
-    ].join(" ");
+    const scopes = ["openid", "email", "profile", "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive.appdata"].join(" ");
 
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-        `client_id=${clientId}&` +
-        `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-        `response_type=token&` +
-        `scope=${encodeURIComponent(scopes)}&` +
-        `prompt=consent`;
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(scopes)}&prompt=consent`;
 
     shell.openExternal(authUrl);
 });
 
-// Canais de atualização chamados pelo Toast
 ipcMain.on('check-for-updates', () => {
     autoUpdater.checkForUpdatesAndNotify();
 });
@@ -215,7 +207,7 @@ ipcMain.on('quit-and-install', () => {
 });
 
 /**
- * CICLO DE VIDA DO APLICATIVO
+ * CICLO DE VIDA
  */
 const gotTheLock = app.requestSingleInstanceLock();
 
@@ -227,7 +219,7 @@ if (!gotTheLock) {
             if (mainWindow.isMinimized()) mainWindow.restore();
             mainWindow.focus();
 
-            const url = commandLine.find(arg => arg.startsWith('nesxtarc://'));
+            const url = commandLine.find(arg => arg.startsWith('nextarc://'));
             if (url) {
                 mainWindow.webContents.send('auth-callback', url);
             }
@@ -239,19 +231,17 @@ if (!gotTheLock) {
         startBackend();
         createWindow();
 
-        // Checar atualização automaticamente ao iniciar em produção
         if (app.isPackaged) {
             setTimeout(() => {
                 autoUpdater.checkForUpdatesAndNotify();
-            }, 5000); // 5 segundos após abrir para não sobrecarregar o início
+            }, 5000);
         }
     });
 }
 
-// Handler para macOS (Deep Link)
 app.on('open-url', (event, url) => {
     event.preventDefault();
-    if (url.startsWith('nesxtarc://')) {
+    if (url.startsWith('nextarc://')) {
         if (mainWindow) {
             mainWindow.webContents.send('auth-callback', url);
         } else {
@@ -260,19 +250,11 @@ app.on('open-url', (event, url) => {
     }
 });
 
+// --- ALTERADO: Garantia total de limpeza ---
 app.on('before-quit', (event) => {
     if (apiProcess && !isQuitting) {
         event.preventDefault();
         isQuitting = true;
         killBackendAndQuit();
-    }
-});
-
-app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
-        if (!isQuitting) {
-            isQuitting = true;
-            killBackendAndQuit();
-        }
     }
 });

@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>Sucesso - NesxtArc</title>
+    <title>Sucesso - NextArc</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -58,7 +58,7 @@
 <body>
     <div class="loader"></div>
     <h1>Login Concluído!</h1>
-    <p>Estamos te enviando de volta para o aplicativo NesxtArc...</p>
+    <p>Estamos te enviando de volta para o aplicativo NextArc...</p>
     <br>
     <a id="return-link" class="btn" href="#">Abrir Aplicativo Manualmente</a>
 
@@ -70,8 +70,8 @@
 
         if (token) {
             // 2. Formata o link do protocolo customizado
-            // Importante: nesxtarc://auth?token=...
-            const deepLink = `nesxtarc://auth?token=${encodeURIComponent(token)}`;
+            // Importante: nextarc://auth?token=...
+            const deepLink = `nextarc://auth?token=${encodeURIComponent(token)}`;
 
             const linkElement = document.getElementById('return-link');
             linkElement.href = deepLink;

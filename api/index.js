@@ -88068,59 +88068,71 @@ const DEFAULT_IMG = 'https://m.media-amazon.com/images/I/71u9vN08Y6L._AC_UF894,1
 
 async function search(query) {
     try {
-        // Limpa o nome para busca
-        const cleanName = query
+        // 1. LIMPEZA PARA URL SLUG (ex: "Oshi no Ko" -> "oshi-no-ko")
+        const cleanSlug = query
+            .replace(/\[|\]/g, '')
             .split(':')[0]
-            .replace(/(\d+st|\d+nd|\d+rd|\d+th|season\s+\d+|season|temporada\s+\d+|parte\s+\d+|part\s+\d+)/gi, '')
-            .trim();
+            .split('-')[0]
+            .replace(/(\d+st|\d+nd|\d+rd|\d+th|season|temporada|parte|part)/gi, '')
+            .trim()
+            .toLowerCase()
+            .replace(/\s+/g, '-'); // Transforma espaços em hifens
 
-        const searchUrl = `https://animesonlinecc.to/search/${encodeURIComponent(cleanName)}`;
         const headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept-Language': 'pt-BR,pt;q=0.9'
+            'Referer': 'https://animesonlinecc.to/'
         };
 
-        console.log(`[AnimesOnline] 🔍 Pesquisando: ${cleanName}`);
+        // ESTRATÉGIA: Tentar o link direto primeiro (é mais rápido e pula o erro da busca)
+        const directLink = `https://animesonlinecc.to/anime/${cleanSlug}/`;
+        console.log(`[AnimesOnline] 🚀 Tentando acesso direto: ${directLink}`);
 
-        const searchResponse = await axios.get(searchUrl, { headers });
-        const $ = cheerio.load(searchResponse.data);
-
-        const animeLink = $('.result-item article a').first().attr('href') || $('.item a').first().attr('href');
-
-        if (!animeLink) {
-            console.log('[AnimesOnline] ❌ Nenhum resultado encontrado');
-            return [];
+        let response;
+        try {
+            response = await axios.get(directLink, { headers });
+        } catch (e) {
+            console.log(`[AnimesOnline] ⚠️ Link direto falhou, tentando busca via query...`);
+            // Se o link direto falhar (404), tentamos a busca por parâmetro oficial
+            const searchUrl = `https://animesonlinecc.to/?s=${cleanSlug.replace(/-/g, '+')}`;
+            response = await axios.get(searchUrl, { headers });
         }
 
-        console.log(`[AnimesOnline] 📄 Página do anime: ${animeLink}`);
-        const animePage = await axios.get(animeLink, { headers });
-        const $$ = cheerio.load(animePage.data);
+        const $ = cheerio.load(response.data);
 
+        // Se caímos na página de busca, precisamos pegar o primeiro link
+        let animePageHtml = response.data;
+        if (response.config.url.includes('?s=')) {
+            const firstResult = $('.result-item article .details .title a').first().attr('href') ||
+                $('article a').first().attr('href');
+
+            if (firstResult) {
+                const secondResponse = await axios.get(firstResult, { headers });
+                animePageHtml = secondResponse.data;
+            } else {
+                return [];
+            }
+        }
+
+        const $$ = cheerio.load(animePageHtml);
         const seasonsResult = [];
 
-        /**
-         * 🚀 NOVA LÓGICA: Percorre as DIVS de temporada (.se-c)
-         * O site organiza como:
-         * <div class="se-c">
-         * <span class="title">Temporada 1</span>
-         * <ul class="episodios">...</ul>
-         * </div>
-         */
-        $$('.se-c').each((_, element) => {
-            const seasonTitleText = $$(element).find('.se-q .title').text().trim();
-            // Extrai apenas o número do texto "Temporada 1"
-            const seasonNumber = parseInt(seasonTitleText.replace(/\D/g, '')) || (seasonsResult.length + 1);
-
+        // 2. EXTRAÇÃO (Usando o HTML que você confirmou)
+        $$('.se-c').each((i, element) => {
+            const seasonNumber = parseInt($$(element).find('.se-t').text().trim()) || (i + 1);
             const episodesInSeason = [];
 
             $$(element).find('ul.episodios li').each((__, li) => {
-                const link = $$(li).find('a').first().attr('href');
-                const title = $$(li).find('.episodiotitle a').text().trim() || $$(li).find('.numerando').text().trim();
-                const img = $$(li).find('img').attr('src') || DEFAULT_IMG;
+                const aTag = $$(li).find('.episodiotitle a');
+                const link = aTag.attr('href');
+                const title = aTag.text().trim();
+                const epNum = $$(li).find('.numerando').text().trim();
 
-                if (link && link.includes('/episodio/')) {
+                let img = $$(li).find('img').attr('src') || '';
+                if (img.startsWith('//')) img = 'https:' + img;
+
+                if (link) {
                     episodesInSeason.push({
-                        title: title,
+                        title: `${epNum} ${title}`,
                         link: link,
                         img: img,
                         provider: 'AnimesOnline',
@@ -88133,47 +88145,16 @@ async function search(query) {
                 seasonsResult.push({
                     season: seasonNumber,
                     title: `Temporada ${seasonNumber}`,
-                    episodes: episodesInSeason.sort((a, b) => {
-                        const na = parseInt(a.title.replace(/\D/g, '')) || 0;
-                        const nb = parseInt(b.title.replace(/\D/g, '')) || 0;
-                        return na - nb;
-                    })
+                    episodes: episodesInSeason
                 });
             }
         });
 
-        // Caso o site mude a estrutura e não encontre nada nas .se-c, tenta o fallback
-        if (seasonsResult.length === 0) {
-            console.warn('[AnimesOnline] ⚠️ Estrutura .se-c não encontrada, usando fallback simples');
-            const fallbackEpisodes = [];
-            $$('ul.episodios li, .list-episodios li').each((_, li) => {
-                const link = $$(li).find('a').attr('href');
-                const title = $$(li).text().trim();
-                if (link && link.includes('/episodio/')) {
-                    fallbackEpisodes.push({
-                        title,
-                        link,
-                        img: DEFAULT_IMG,
-                        provider: 'AnimesOnline',
-                        season: 1
-                    });
-                }
-            });
-
-            if (fallbackEpisodes.length > 0) {
-                seasonsResult.push({
-                    season: 1,
-                    title: 'Temporada 1',
-                    episodes: fallbackEpisodes
-                });
-            }
-        }
-
-        console.log(`[AnimesOnline] ✅ ${seasonsResult.length} temporadas detectadas`);
-        return seasonsResult.sort((a, b) => a.season - b.season);
+        console.log(`[AnimesOnline] ✨ Sucesso! Encontradas ${seasonsResult.length} temporadas.`);
+        return seasonsResult;
 
     } catch (error) {
-        console.error('[AnimesOnline] ❌ Erro:', error.message);
+        console.error('[AnimesOnline] ❌ Erro crítico:', error.message);
         return [];
     }
 }
@@ -93892,21 +93873,35 @@ module.exports = /*#__PURE__*/JSON.parse('["UTF-8","IBM866","ISO-8859-2","ISO-88
 /******/ 	
 /************************************************************************/
 var __webpack_exports__ = {};
-const express = __nccwpck_require__(1565)
-const cors = __nccwpck_require__(5658)
+const express = __nccwpck_require__(1565);
+const cors = __nccwpck_require__(5658);
 
-const animefire = __nccwpck_require__(3339)
-const animesonline = __nccwpck_require__(5585)
+const animefire = __nccwpck_require__(3339);
+const animesonline = __nccwpck_require__(5585);
 
-const app = express()
-app.use(cors())
+const app = express();
+app.use(cors());
 
 /* =======================
-   SEGURANÇA (Electron)
+   🛡️ SEGURANÇA E AUTO-SUICÍDIO
 ======================= */
-process.on('disconnect', () => process.exit())
-process.on('SIGINT', () => process.exit())
-process.on('SIGTERM', () => process.exit())
+// Se o processo pai (Electron) desconectar, a API morre sozinha
+process.on('disconnect', () => {
+    console.log('[API] Pai desconectado. Encerrando...');
+    process.exit();
+});
+
+process.on('SIGINT', () => process.exit());
+process.on('SIGTERM', () => process.exit());
+
+// Prevenção contra travamentos (Auto-Kill órfão)
+// Se por algum motivo o Electron fechar e não matar a API, 
+// este check ajuda a encerrar o processo.
+setInterval(() => {
+    if (process.stdout && !process.stdout.writable) {
+        process.exit();
+    }
+}, 30000);
 
 /* =======================
    FUNÇÃO CENTRAL
@@ -93921,8 +93916,13 @@ async function searchAll(q) {
 
     for (const p of providers) {
         try {
+            console.log(`[API] Buscando "${q}" em ${p.name}...`);
             const seasons = await p.api.search(q);
-            if (!Array.isArray(seasons)) continue;
+
+            if (!Array.isArray(seasons)) {
+                console.log(`[API] Provider ${p.name} não retornou array.`);
+                continue;
+            }
 
             seasons.forEach(s => {
                 const seasonNum = s.season || 1;
@@ -93939,18 +93939,18 @@ async function searchAll(q) {
                 }
             });
         } catch (e) {
-            console.error(`Erro no provider ${p.name}:`, e.message);
+            console.error(`[API] Erro no provider ${p.name}:`, e.message);
         }
     }
     return allEpisodes;
 }
 
 /* =======================
-   🎥 1. ROTA DE VÍDEO (PRIORIDADE)
+   🎥 1. ROTA DE VÍDEO
 ======================= */
 app.get('/api/video', async (req, res) => {
     const { url, provider } = req.query;
-    console.log(`[VIDEO] 🎬 Request para: ${provider}`);
+    console.log(`[VIDEO] 🎬 Request para: ${provider} | URL: ${url}`);
 
     if (!url || !provider) {
         return res.status(400).json({ error: 'Parâmetros inválidos' });
@@ -93958,7 +93958,6 @@ app.get('/api/video', async (req, res) => {
 
     try {
         let videoUrl = null;
-
         if (provider === 'AnimeFire') {
             videoUrl = await animefire.extractVideo(url);
         } else if (provider === 'AnimesOnline') {
@@ -93966,11 +93965,11 @@ app.get('/api/video', async (req, res) => {
         }
 
         if (videoUrl) {
-            console.log(`[VIDEO] ✅ URL extraída`);
+            console.log(`[VIDEO] ✅ Sucesso!`);
             return res.json({ url: videoUrl });
         }
 
-        console.log(`[VIDEO] ❌ Link não encontrado`);
+        console.log(`[VIDEO] ❌ Falha na extração`);
         return res.status(404).json({ url: null, error: 'Vídeo não encontrado' });
     } catch (e) {
         console.error(`[VIDEO] 🚨 Erro:`, e.message);
@@ -93982,13 +93981,29 @@ app.get('/api/video', async (req, res) => {
    🔎 2. ROTA DE BUSCA
 ======================= */
 app.get('/api/search', async (req, res) => {
-    const q = req.query.q;
-    console.log(`[SEARCH] 🔍 Buscando por: ${q}`);
+    let q = req.query.q;
 
     if (!q) return res.json([]);
 
+    // 1. EXTRAÇÃO INTELIGENTE: Se o nome vier como "[Oshi no Ko] 3rd Season"
+    // tentamos pegar apenas o que está dentro dos colchetes.
+    const matchColchetes = q.match(/\[(.*?)\]/);
+    if (matchColchetes && matchColchetes[1]) {
+        q = matchColchetes[1];
+    }
+
+    // 2. LIMPEZA ADICIONAL: Remove termos técnicos de temporada que sobraram
+    const cleanQuery = q
+        .replace(/(\d+st|\d+nd|\d+rd|\d+th|season\s+\d+|season|temporada\s+\d+|parte\s+\d+|part\s+\d+)/gi, '')
+        .trim();
+
+    console.log(`[SEARCH] 🔍 Buscando por: "${cleanQuery}" (Query original: "${req.query.q}")`);
+
     try {
-        const episodes = await searchAll(q);
+        // Passamos a query limpa para o searchAll
+        const episodes = await searchAll(cleanQuery);
+
+        console.log(`[SEARCH] ✅ Retornando ${episodes.length} episódios para "${cleanQuery}"`);
         return res.json(episodes);
     } catch (e) {
         console.error(`[SEARCH] 🚨 Erro:`, e.message);
@@ -93997,26 +94012,27 @@ app.get('/api/search', async (req, res) => {
 });
 
 /* =======================
-    🔥 3. ROTA DE LANÇAMENTOS
+   🔥 3. ROTA DE LANÇAMENTOS
 ======================= */
 app.get('/api/episodes', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     try {
+        console.log(`[RECENT] 🕒 Pagina: ${page}`);
         const episodes = await animesonline.getRecentEpisodes(page);
         res.json(episodes);
     } catch (e) {
+        console.error(`[RECENT] 🚨 Erro:`, e.message);
         res.status(500).json([]);
     }
 });
+
 /* =======================
-   START
+   🚀 START
 ======================= */
-const PORT = 3000
-app.listen(PORT, () => {
-    console.log(`🚀 NextArc API rodando em http://127.0.0.1:${PORT}`)
-    console.log(`-- Rota de vídeo: /api/video`)
-    console.log(`-- Rota de busca: /api/search`)
-})
+const PORT = 3000;
+app.listen(PORT, '127.0.0.1', () => {
+    console.log(`🚀 NextArc API online na porta ${PORT}`);
+});
 module.exports = __webpack_exports__;
 /******/ })()
 ;

@@ -5,59 +5,71 @@ const DEFAULT_IMG = 'https://m.media-amazon.com/images/I/71u9vN08Y6L._AC_UF894,1
 
 async function search(query) {
     try {
-        // Limpa o nome para busca
-        const cleanName = query
+        // 1. LIMPEZA PARA URL SLUG (ex: "Oshi no Ko" -> "oshi-no-ko")
+        const cleanSlug = query
+            .replace(/\[|\]/g, '')
             .split(':')[0]
-            .replace(/(\d+st|\d+nd|\d+rd|\d+th|season\s+\d+|season|temporada\s+\d+|parte\s+\d+|part\s+\d+)/gi, '')
-            .trim();
+            .split('-')[0]
+            .replace(/(\d+st|\d+nd|\d+rd|\d+th|season|temporada|parte|part)/gi, '')
+            .trim()
+            .toLowerCase()
+            .replace(/\s+/g, '-'); // Transforma espaços em hifens
 
-        const searchUrl = `https://animesonlinecc.to/search/${encodeURIComponent(cleanName)}`;
         const headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept-Language': 'pt-BR,pt;q=0.9'
+            'Referer': 'https://animesonlinecc.to/'
         };
 
-        console.log(`[AnimesOnline] 🔍 Pesquisando: ${cleanName}`);
+        // ESTRATÉGIA: Tentar o link direto primeiro (é mais rápido e pula o erro da busca)
+        const directLink = `https://animesonlinecc.to/anime/${cleanSlug}/`;
+        console.log(`[AnimesOnline] 🚀 Tentando acesso direto: ${directLink}`);
 
-        const searchResponse = await axios.get(searchUrl, { headers });
-        const $ = cheerio.load(searchResponse.data);
-
-        const animeLink = $('.result-item article a').first().attr('href') || $('.item a').first().attr('href');
-
-        if (!animeLink) {
-            console.log('[AnimesOnline] ❌ Nenhum resultado encontrado');
-            return [];
+        let response;
+        try {
+            response = await axios.get(directLink, { headers });
+        } catch (e) {
+            console.log(`[AnimesOnline] ⚠️ Link direto falhou, tentando busca via query...`);
+            // Se o link direto falhar (404), tentamos a busca por parâmetro oficial
+            const searchUrl = `https://animesonlinecc.to/?s=${cleanSlug.replace(/-/g, '+')}`;
+            response = await axios.get(searchUrl, { headers });
         }
 
-        console.log(`[AnimesOnline] 📄 Página do anime: ${animeLink}`);
-        const animePage = await axios.get(animeLink, { headers });
-        const $$ = cheerio.load(animePage.data);
+        const $ = cheerio.load(response.data);
 
+        // Se caímos na página de busca, precisamos pegar o primeiro link
+        let animePageHtml = response.data;
+        if (response.config.url.includes('?s=')) {
+            const firstResult = $('.result-item article .details .title a').first().attr('href') ||
+                $('article a').first().attr('href');
+
+            if (firstResult) {
+                const secondResponse = await axios.get(firstResult, { headers });
+                animePageHtml = secondResponse.data;
+            } else {
+                return [];
+            }
+        }
+
+        const $$ = cheerio.load(animePageHtml);
         const seasonsResult = [];
 
-        /**
-         * 🚀 NOVA LÓGICA: Percorre as DIVS de temporada (.se-c)
-         * O site organiza como:
-         * <div class="se-c">
-         * <span class="title">Temporada 1</span>
-         * <ul class="episodios">...</ul>
-         * </div>
-         */
-        $$('.se-c').each((_, element) => {
-            const seasonTitleText = $$(element).find('.se-q .title').text().trim();
-            // Extrai apenas o número do texto "Temporada 1"
-            const seasonNumber = parseInt(seasonTitleText.replace(/\D/g, '')) || (seasonsResult.length + 1);
-
+        // 2. EXTRAÇÃO (Usando o HTML que você confirmou)
+        $$('.se-c').each((i, element) => {
+            const seasonNumber = parseInt($$(element).find('.se-t').text().trim()) || (i + 1);
             const episodesInSeason = [];
 
             $$(element).find('ul.episodios li').each((__, li) => {
-                const link = $$(li).find('a').first().attr('href');
-                const title = $$(li).find('.episodiotitle a').text().trim() || $$(li).find('.numerando').text().trim();
-                const img = $$(li).find('img').attr('src') || DEFAULT_IMG;
+                const aTag = $$(li).find('.episodiotitle a');
+                const link = aTag.attr('href');
+                const title = aTag.text().trim();
+                const epNum = $$(li).find('.numerando').text().trim();
 
-                if (link && link.includes('/episodio/')) {
+                let img = $$(li).find('img').attr('src') || '';
+                if (img.startsWith('//')) img = 'https:' + img;
+
+                if (link) {
                     episodesInSeason.push({
-                        title: title,
+                        title: `${epNum} ${title}`,
                         link: link,
                         img: img,
                         provider: 'AnimesOnline',
@@ -70,47 +82,16 @@ async function search(query) {
                 seasonsResult.push({
                     season: seasonNumber,
                     title: `Temporada ${seasonNumber}`,
-                    episodes: episodesInSeason.sort((a, b) => {
-                        const na = parseInt(a.title.replace(/\D/g, '')) || 0;
-                        const nb = parseInt(b.title.replace(/\D/g, '')) || 0;
-                        return na - nb;
-                    })
+                    episodes: episodesInSeason
                 });
             }
         });
 
-        // Caso o site mude a estrutura e não encontre nada nas .se-c, tenta o fallback
-        if (seasonsResult.length === 0) {
-            console.warn('[AnimesOnline] ⚠️ Estrutura .se-c não encontrada, usando fallback simples');
-            const fallbackEpisodes = [];
-            $$('ul.episodios li, .list-episodios li').each((_, li) => {
-                const link = $$(li).find('a').attr('href');
-                const title = $$(li).text().trim();
-                if (link && link.includes('/episodio/')) {
-                    fallbackEpisodes.push({
-                        title,
-                        link,
-                        img: DEFAULT_IMG,
-                        provider: 'AnimesOnline',
-                        season: 1
-                    });
-                }
-            });
-
-            if (fallbackEpisodes.length > 0) {
-                seasonsResult.push({
-                    season: 1,
-                    title: 'Temporada 1',
-                    episodes: fallbackEpisodes
-                });
-            }
-        }
-
-        console.log(`[AnimesOnline] ✅ ${seasonsResult.length} temporadas detectadas`);
-        return seasonsResult.sort((a, b) => a.season - b.season);
+        console.log(`[AnimesOnline] ✨ Sucesso! Encontradas ${seasonsResult.length} temporadas.`);
+        return seasonsResult;
 
     } catch (error) {
-        console.error('[AnimesOnline] ❌ Erro:', error.message);
+        console.error('[AnimesOnline] ❌ Erro crítico:', error.message);
         return [];
     }
 }

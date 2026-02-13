@@ -22,8 +22,8 @@ function hash(data: unknown): string {
 function cleanToken(token?: string | null): string | null {
     if (!token) return null
     return token
-        .replace('nesxtarc://auth/', '')
-        .replace('nesxtarc://auth', '')
+        .replace('nextarc://auth/', '')
+        .replace('nextarc://auth', '')
 }
 
 /* =========================

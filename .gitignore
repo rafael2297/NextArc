@@ -1,76 +1,83 @@
 # =========================
-# Logs
+# Dependências (Obrigatório)
+# =========================
+node_modules/
+.pnp
+.pnp.js
+
+# =========================
+# Builds e Saídas (Frontend e Electron)
+# =========================
+dist/
+dist-ssr/
+dist-electron/
+release/
+build/
+out/
+win-unpacked/
+.vite/
+
+# Artefatos de instaladores
+*.exe
+*.msi
+*.zip
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+*.blockmap
+*.yml
+
+# =========================
+# Ambiente e Segredos (Segurança!)
+# =========================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.local
+
+# =========================
+# Firebase e Ferramentas Cloud
+# =========================
+.firebase/
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+
+# =========================
+# Logs e Cache
 # =========================
 logs
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-# =========================
-# Dependencies
-# =========================
-node_modules/
-
-# =========================
-# Vite / React build
-# =========================
-dist/
-dist-ssr/
-.vite/
-
-# =========================
-# Electron / Electron Builder
-# =========================
-dist-electron/
-release/
-build/
-out/
-win-unpacked/
-
-# Executáveis e artefatos de release
-*.exe
-*.msi
-*.dmg
-*.AppImage
-*.blockmap
-
-# =========================
-# Env files
-# =========================
-.env
-.env.*
-*.local
-
-# =========================
-# Firebase
-# =========================
-.firebase/
-
-# =========================
-# Cache / Coverage
-# =========================
-.cache/
 .eslintcache
-coverage/
+.cache/
+.tsbuildinfo
 
 # =========================
-# Editor / OS
+# Editores e Sistema Operacional
 # =========================
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
 .idea/
-.DS_Store
-Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+.DS_Store
+Thumbs.db
 
 # =========================
-# TypeScript
+# Python (Já que vi que você usa .venv)
 # =========================
-*.tsbuildinfo
+.venv/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
