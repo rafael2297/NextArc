@@ -143,14 +143,19 @@ export const useAppStore = create<AppState>()(
         return { duplicate: false, refund: 0, card }
       },
 
-      addAnime: (anime) => set((state) => ({
-        animeList: [...state.animeList, {
-          ...anime,
-          type: 'anime',
-          addedAt: anime.addedAt || Date.now(),
-          updatedAt: Date.now()
-        }],
-      })),
+      addAnime: (anime) => {
+        // 🛡️ Trava de segurança: se já tem, não faz nada
+        if (get().hasAnime(anime.id)) return;
+
+        set((state) => ({
+          animeList: [...state.animeList, {
+            ...anime,
+            type: 'anime',
+            addedAt: anime.addedAt || Date.now(),
+            updatedAt: Date.now()
+          }],
+        }));
+      },
 
       updateAnime: (id, data) => set((state) => {
         const animeIndex = state.animeList.findIndex(a => String(a.id) === String(id));
@@ -180,14 +185,19 @@ export const useAppStore = create<AppState>()(
         animeList: state.animeList.filter((a) => String(a.id) !== String(id)),
       })),
 
-      addManga: (manga) => set((state) => ({
-        mangaList: [...state.mangaList, {
-          ...manga,
-          type: 'manga',
-          addedAt: manga.addedAt || Date.now(),
-          updatedAt: Date.now()
-        }],
-      })),
+      addManga: (manga) => {
+        // 🛡️ Trava de segurança: se já tem, não faz nada
+        if (get().hasManga(manga.id)) return;
+
+        set((state) => ({
+          mangaList: [...state.mangaList, {
+            ...manga,
+            type: 'manga',
+            addedAt: manga.addedAt || Date.now(),
+            updatedAt: Date.now()
+          }],
+        }));
+      },
 
       updateManga: (id, data) => set((state) => {
         const mangaIndex = state.mangaList.findIndex(m => String(m.id) === String(id));

@@ -5,6 +5,7 @@ import { Plus, Check, Star, Trophy, Tv, Activity, Youtube, Search } from 'lucide
 import Layout from '../../components/layout/Layout'
 import { useProfileStore } from '../../store/useProfileStore'
 import { hexToRgba, getContrastColor } from '../../utils/colors'
+import { useAppStore } from '../../store/useAppStore'
 
 import type {
     MediaType,
@@ -66,11 +67,12 @@ const InfoBadge = ({ icon: Icon, label, value, color, themeNavbar, textColor }: 
 )
 
 export default function MediaDetailsLayout({
+    data,
+    mediaType,
+    onAdd,
     loading,
     error,
-    data,
     isAdded,
-    onAdd,
     suggestions = [],
     onSelectSuggestion
 }: Props) {
@@ -78,6 +80,9 @@ export default function MediaDetailsLayout({
     const profile = useProfileStore((state) => state.profile)
     const { theme, banner: userBanner } = profile
     const textColor = getContrastColor(theme.background)
+    const animeList = useAppStore(state => state.animeList);
+    const mangaList = useAppStore(state => state.mangaList);
+
 
     // Lógica de Processamento do Trailer
     const trailer = useMemo(() => {
@@ -94,6 +99,15 @@ export default function MediaDetailsLayout({
                 `https://img.youtube.com/vi/${id}/maxresdefault.jpg`
         };
     }, [data]);
+
+    const isActuallyAdded = useMemo(() => {
+        if (!data) return false;
+        const id = data.mal_id;
+        return mediaType === 'anime'
+            ? animeList.some(a => String(a.id) === String(id))
+            : mangaList.some(m => String(m.id) === String(id));
+    }, [data, mediaType, animeList, mangaList]);
+
 
     // --- TELA DE CARREGAMENTO ---
     if (loading) {
@@ -262,18 +276,20 @@ export default function MediaDetailsLayout({
                             </div>
 
                             <button
-                                disabled={isAdded}
+                                // Usamos a nossa variável reativa aqui
+                                disabled={isActuallyAdded}
                                 onClick={onAdd}
                                 className="mt-2 w-full sm:w-auto inline-flex items-center justify-center gap-3 rounded-2xl px-8 py-4 text-xs font-black uppercase tracking-[0.2em] transition-all active:scale-95"
                                 style={{
-                                    backgroundColor: isAdded ? hexToRgba(theme.primary, 0.1) : theme.primary,
-                                    color: isAdded ? theme.primary : getContrastColor(theme.primary),
-                                    border: isAdded ? `1px solid ${hexToRgba(theme.primary, 0.2)}` : 'none',
-                                    boxShadow: isAdded ? 'none' : `0 10px 30px -10px ${hexToRgba(theme.primary, 0.5)}`
+                                    backgroundColor: isActuallyAdded ? hexToRgba(theme.primary, 0.1) : theme.primary,
+                                    color: isActuallyAdded ? theme.primary : getContrastColor(theme.primary),
+                                    border: isActuallyAdded ? `1px solid ${hexToRgba(theme.primary, 0.2)}` : 'none',
+                                    boxShadow: isActuallyAdded ? 'none' : `0 10px 30px -10px ${hexToRgba(theme.primary, 0.5)}`,
+                                    cursor: isActuallyAdded ? 'default' : 'pointer' // Adicionado para melhor UX
                                 }}
                             >
-                                {isAdded ? <Check size={18} /> : <Plus size={18} />}
-                                {isAdded ? 'Na biblioteca' : 'Adicionar'}
+                                {isActuallyAdded ? <Check size={18} /> : <Plus size={18} />}
+                                {isActuallyAdded ? 'Na biblioteca' : 'Adicionar'}
                             </button>
                         </div>
                     </div>
